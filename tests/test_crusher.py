@@ -95,6 +95,18 @@ def test_generic_word_does_not_pollute_relevance():
     assert len(keep) < 30        # 記事 did not keep everything
 
 
+def test_summary_embeds_aggregates():
+    # Aggregation answerability: sum and value-counts survive lossy row-drop.
+    data = [{"id": i, "user": f"u{i}", "amount": 1000 + i,
+             "status": "キャンセル" if i % 10 == 0 else "支払済"} for i in range(40)]
+    r = compress(json.dumps(data, ensure_ascii=False))
+    assert r.dropped > 0
+    assert "_集計_全体" in r.text
+    assert str(sum(d["amount"] for d in data)) in r.text         # true total present
+    n_cancel = sum(1 for d in data if d["status"] == "キャンセル")
+    assert f'"キャンセル": {n_cancel}' in r.text                  # true count present
+
+
 def test_small_array_untouched():
     data = [{"id": i} for i in range(3)]
     keep, dropped = crush_array(data, None, CrusherConfig())

@@ -42,6 +42,8 @@ class CrusherConfig:
     rare_value_fraction: float = 0.1  # categorical value in <= this fraction = rare
     rare_value_max_distinct: int = 50  # skip high-cardinality (id-like) fields
     keep_numeric_extremes: bool = True  # always keep per-field min & max items
+    include_summary: bool = True       # emit whole-array aggregates (count/sum/freq)
+    summary_max_distinct: int = 20     # categorical freq only below this cardinality
 
 
 def _dumps(item) -> str:
@@ -206,6 +208,46 @@ def _even_sample(pool: list[int], k: int) -> list[int]:
         return [pool[len(pool) // 2]]
     step = (len(pool) - 1) / (k - 1)
     return [pool[round(i * step)] for i in range(k)]
+
+
+def summarize(items: list, ignore_keys=()) -> dict:
+    """Whole-array aggregates so aggregation questions (sum / count / min / max)
+    are answerable even after lossy row-dropping. Computed over EVERY item.
+
+    Numeric fields -> {合計, 最小, 最大, 平均}. Low-cardinality categorical/bool
+    fields -> value frequency. id-like / high-cardinality fields are skipped.
+    """
+    dicts = [d for d in items if isinstance(d, dict)]
+    if not dicts:
+        return {}
+    out: dict = {"件数": len(items)}
+    num_keys: set[str] = set()
+    cat_keys: set[str] = set()
+    for d in dicts:
+        for k, v in d.items():
+            if k in ignore_keys:
+                continue
+            if isinstance(v, bool) or isinstance(v, str):
+                cat_keys.add(k)
+            elif isinstance(v, (int, float)):
+                num_keys.add(k)
+    for k in num_keys:
+        vals = [d[k] for d in dicts
+                if isinstance(d.get(k), (int, float)) and not isinstance(d.get(k), bool)]
+        if vals:
+            out[k] = {"合計": sum(vals), "最小": min(vals), "最大": max(vals),
+                      "平均": round(sum(vals) / len(vals), 2)}
+    for k in cat_keys:
+        freq: dict = {}
+        for d in dicts:
+            v = d.get(k)
+            if v is None:
+                continue
+            freq[v] = freq.get(v, 0) + 1
+        if 1 < len(freq) <= 20:
+            out[f"{k}_値別件数"] = {str(kk): vv
+                                    for kk, vv in sorted(freq.items(), key=lambda x: -x[1])}
+    return out
 
 
 def crush_array(data: list, query: str | None, cfg: CrusherConfig):

@@ -17,12 +17,12 @@ import copy
 import json
 
 from .cache import CCRStore
-from .crusher import CrusherConfig, crush_array
+from .crusher import CrusherConfig, crush_array, summarize
 from .router import detect
 from .tokens import count_tokens
 from .types import CompressResult
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 # Minimum input tokens worth compressing (matches headroom's min_tokens_to_crush).
 MIN_TOKENS_TO_CRUSH = 200
@@ -111,6 +111,12 @@ def compress(
             out += f"\n[{len(dropped)}/{len(arr)}件 省略 · retrieve key={cache_key}]"
         else:
             out += f"\n[{len(dropped)}/{len(arr)}件 省略]"
+
+    # Whole-array aggregates so sum/count/min/max stay answerable after row-drop.
+    if cfg.include_summary and dropped:
+        summary = summarize(arr, cfg.dedup_ignore_keys)
+        if summary:
+            out += "\n" + json.dumps({"_集計_全体": summary}, ensure_ascii=False)
 
     comp_tok = count_tokens(out)
 
