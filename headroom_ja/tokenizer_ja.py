@@ -128,7 +128,7 @@ def keywords(text: str) -> set[str]:
         if ty != "keyword":
             continue
         for sub in _subtokens(t):
-            sub = sub.strip()
+            sub = sub.strip().lower()  # lower-case latin so VIP == vip; CJK unaffected
             if not sub:
                 continue
             if len(sub) == 1 and _is_hiragana(sub):  # leftover grammatical noise

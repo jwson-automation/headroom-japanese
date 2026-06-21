@@ -31,11 +31,14 @@ from headroom_ja.tokens import BACKEND
 from . import datasets
 
 
-def _answer_kept(text: str, answer_ids: list[int]):
-    """True if every answer-bearing item survived; None if aggregation (no single item)."""
+def _answer_kept(text: str, answer_ids):
+    """True if every answer-bearing item survived; None if aggregation (no single item).
+
+    answer_ids holds the raw id VALUES (int or str), matched as they appear in JSON.
+    """
     if not answer_ids:
         return None
-    return all(f'"id": {i}' in text for i in answer_ids)
+    return all(f'"id": {json.dumps(v, ensure_ascii=False)}' in text for v in answer_ids)
 
 
 def run(use_llm: bool, out_path: str | None, md_path: str | None):
@@ -50,7 +53,7 @@ def run(use_llm: bool, out_path: str | None, md_path: str | None):
         row = {
             "dataset": name,
             "token_backend": BACKEND,
-            "n_items": len(data) if isinstance(data, list) else len(data.get("results", [])),
+            "n_items": (r.kept + r.dropped) or (len(data) if isinstance(data, list) else 0),
             "question": question,
             "gold": gold,
             "original_tokens": r.original_tokens,
@@ -60,6 +63,8 @@ def run(use_llm: bool, out_path: str | None, md_path: str | None):
             "dropped": r.dropped,
             "answer_ids": answer_ids,
             "answer_kept": kept,
+            "original_data": content,   # full input sent for the 'full' answer
+            "compressed_text": r.text,  # exactly what the LLM saw for the 'compressed' answer
         }
 
         if use_llm:
@@ -180,15 +185,21 @@ def _render_markdown(rows) -> str:
     L.append("")
     L.append("## Transcripts")
     L.append("")
+    L.append("Each case shows the **full original data** (what the `full` answer saw), "
+             "the **exact compressed text** sent to the model (what the `compressed` "
+             "answer saw), and both answers verbatim.")
+    L.append("")
     for r in rows:
         L.append(f"### `{r['dataset']}`  ({r['n_items']} items)")
         L.append("")
-        L.append(f"- **質問**: {r['question']}")
+        L.append(f"- **質問 (question)**: {r['question']}")
         L.append(f"- **正解 (gold)**: `{r['gold']}`")
         L.append(f"- **トークン**: {r['original_tokens']} → {r['compressed_tokens']} "
                  f"(**{r['ratio']:.0%}** saved · kept {r['kept']} / dropped {r['dropped']})")
         kept = "n/a (集計のため単一item無し)" if r["answer_kept"] is None else str(r["answer_kept"])
         L.append(f"- **answer_kept**: {kept}")
+        L.append("")
+        L.append("**回答 (answers):**")
         L.append("")
         L.append("| context | 回答 | 判定 |")
         L.append("|---|---|:---:|")
@@ -196,6 +207,20 @@ def _render_markdown(rows) -> str:
                  f"{yn(r['full_correct'])} |")
         L.append(f"| 圧縮 (compressed, {r['compressed_tokens']}tok) | {r['answer_compressed']} | "
                  f"{yn(r['compressed_correct'])} |")
+        L.append("")
+        L.append("**送信した圧縮テキスト (compressed text the model actually saw):**")
+        L.append("")
+        L.append("```json")
+        L.append(r["compressed_text"])
+        L.append("```")
+        L.append("")
+        L.append(f"<details><summary>元データ全体 (full original data, {r['n_items']} items)</summary>")
+        L.append("")
+        L.append("```json")
+        L.append(r["original_data"])
+        L.append("```")
+        L.append("")
+        L.append("</details>")
         L.append("")
 
     return "\n".join(L) + "\n"

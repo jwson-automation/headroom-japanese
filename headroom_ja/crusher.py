@@ -39,6 +39,9 @@ class CrusherConfig:
     last_fraction: float = 0.15
     dedup_ignore_keys: tuple = _DEFAULT_IGNORE
     relevance_min_idf: float = 0.5    # min IDF-weighted overlap to count as relevant
+    rare_value_fraction: float = 0.1  # categorical value in <= this fraction = rare
+    rare_value_max_distinct: int = 50  # skip high-cardinality (id-like) fields
+    keep_numeric_extremes: bool = True  # always keep per-field min & max items
 
 
 def _dumps(item) -> str:
@@ -100,6 +103,54 @@ def _numeric_outliers(data, pool, threshold) -> set[int]:
             for i, v in vals:
                 if abs(v - mu) / sd >= threshold:
                     keep.add(i)
+    return keep
+
+
+def _rare_value_outliers(data, pool, fraction, max_distinct) -> set[int]:
+    """Items carrying a RARE categorical/boolean value (e.g. one status:返品 among
+    thousands of 支払済, or is_vip:true on one item). Pareto-style: skip numeric
+    fields (handled by outliers) and id-like high-cardinality fields.
+    """
+    dicts = [(i, data[i]) for i in pool if isinstance(data[i], dict)]
+    n = len(dicts)
+    if n < 5:
+        return set()
+    # key -> value -> list of indices (str / bool values only)
+    by_key: dict[str, dict] = {}
+    for i, d in dicts:
+        for k, v in d.items():
+            if isinstance(v, bool) or isinstance(v, str):
+                by_key.setdefault(k, {}).setdefault(v, []).append(i)
+    keep: set[int] = set()
+    for k, vmap in by_key.items():
+        distinct = len(vmap)
+        if distinct < 2 or distinct > max_distinct or distinct > n * 0.5:
+            continue  # constant, high-cardinality, or id-like
+        for v, idxs in vmap.items():
+            if len(idxs) / n <= fraction:
+                keep.update(idxs)
+    return keep
+
+
+def _numeric_extremes(data, pool) -> set[int]:
+    """Always keep the min and max item of every numeric field (catches
+    'cheapest' / 'most expensive' / 'oldest' questions even when not 2σ outliers)."""
+    keep: set[int] = set()
+    dicts = [(i, data[i]) for i in pool if isinstance(data[i], dict)]
+    if len(dicts) < 3:
+        return keep
+    num_keys: set[str] = set()
+    for _, d in dicts:
+        for k, v in d.items():
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                num_keys.add(k)
+    for k in num_keys:
+        vals = [(i, d[k]) for i, d in dicts
+                if isinstance(d.get(k), (int, float)) and not isinstance(d.get(k), bool)]
+        if len(vals) < 3:
+            continue
+        keep.add(min(vals, key=lambda x: x[1])[0])
+        keep.add(max(vals, key=lambda x: x[1])[0])
     return keep
 
 
@@ -180,6 +231,10 @@ def crush_array(data: list, query: str | None, cfg: CrusherConfig):
             critical.add(i)
     critical |= _numeric_outliers(data, pool, cfg.variance_threshold)
     critical |= _structural_outliers(data, pool, cfg.core_field_fraction)
+    critical |= _rare_value_outliers(data, pool, cfg.rare_value_fraction,
+                                     cfg.rare_value_max_distinct)
+    if cfg.keep_numeric_extremes:
+        critical |= _numeric_extremes(data, pool)
     if query:
         critical |= _relevant(data, pool, query, cfg.relevance_min_idf)
 

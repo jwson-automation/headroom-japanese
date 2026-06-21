@@ -13,6 +13,7 @@ Basic use:
 
 from __future__ import annotations
 
+import copy
 import json
 
 from .cache import CCRStore
@@ -21,7 +22,7 @@ from .router import detect
 from .tokens import count_tokens
 from .types import CompressResult
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 # Minimum input tokens worth compressing (matches headroom's min_tokens_to_crush).
 MIN_TOKENS_TO_CRUSH = 200
@@ -30,12 +31,28 @@ MIN_TOKENS_TO_CRUSH = 200
 STORE = CCRStore()
 
 
-def _largest_array_field(d: dict):
-    """Return (key, list) of the longest list-valued field, or None."""
-    arrays = [(k, v) for k, v in d.items() if isinstance(v, list)]
-    if not arrays:
-        return None
-    return max(arrays, key=lambda kv: len(kv[1]))
+def _find_largest_array(obj):
+    """Find the longest list anywhere in a nested dict/list tree.
+
+    Returns (parent, key_or_index, list) where parent[key] is the list, so the
+    caller can replace it in place. Handles API envelopes like
+    {"response": {"data": {"orders": [...]}}}. Returns None if no list exists.
+    """
+    best = None
+
+    def walk(node):
+        nonlocal best
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if isinstance(v, list) and (best is None or len(v) > len(best[2])):
+                    best = (node, k, v)
+                walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(obj)
+    return best
 
 
 def compress(
@@ -63,26 +80,26 @@ def compress(
 
     data = json.loads(content)
 
-    # Locate the array to compress: a top-level list, or the largest list field
-    # inside a top-level object (e.g. {"results": [...]}).
-    rewrap_key = None
+    # Locate the array to compress: a top-level list, or the largest list found
+    # anywhere inside a nested object (e.g. {"response":{"data":{"orders":[...]}}}).
     if isinstance(data, list):
         arr = data
-    elif isinstance(data, dict):
-        found = _largest_array_field(data)
+        rewrap = None
+    else:
+        work = copy.deepcopy(data)
+        found = _find_largest_array(work)
         if not found:
             return passthrough("json")
-        rewrap_key, arr = found
-    else:
-        return passthrough("json")
+        parent, key, arr = found
+        rewrap = (work, parent, key)
 
     keep, dropped = crush_array(arr, query, cfg)
     kept_items = [arr[i] for i in keep]
 
-    if rewrap_key is not None:
-        parent = dict(data)
-        parent[rewrap_key] = kept_items
-        out = json.dumps(parent, ensure_ascii=False)
+    if rewrap is not None:
+        work, parent, key = rewrap
+        parent[key] = kept_items
+        out = json.dumps(work, ensure_ascii=False)
     else:
         out = json.dumps(kept_items, ensure_ascii=False)
 

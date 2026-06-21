@@ -129,10 +129,69 @@ def gen_count_status(n=200):
     return data, "キャンセルされた注文は全部で何件ですか？", str(len(cancel_ids)), []
 
 
+# ── round C: harder / structurally diverse ─────────────────────────────────
+
+def gen_deep_nested(n=200, pos=88):
+    """Array buried two levels deep: {response:{data:{orders:[...]}}}."""
+    orders = [{"id": i, "user": f"user{i}", "amount": 5000, "status": "支払済"}
+              for i in range(n)]
+    orders[pos] = {"id": pos, "user": "高橋", "amount": 5000,
+                   "status": "エラー", "msg": "住所が無効です"}
+    data = {"response": {"data": {"orders": orders}, "count": n}}
+    return data, "住所エラーになった注文のユーザー名は誰ですか？", "高橋", [pos]
+
+
+def gen_uuid_ids(n=200, pos=130):
+    """String (non-integer) ids. Exercises dedup-ignore + id-based answer check."""
+    data = [{"id": f"ord-{i:04d}", "user": f"user{i}", "amount": 7000,
+             "status": "支払済"} for i in range(n)]
+    data[pos] = {"id": f"ord-{pos:04d}", "user": "伊藤", "amount": 7000,
+                 "status": "拒否", "msg": "カードが拒否されました"}
+    return data, "拒否された注文のユーザー名は誰ですか？", "伊藤", [f"ord-{pos:04d}"]
+
+
+def gen_vip_flag(n=200, pos=140):
+    """Rare boolean/value discriminator. The VIP marker is the *value*, not text -
+    targets rare-value detection (relevance can't help: is_vip appears on every item)."""
+    data = [{"id": i, "user": f"user{i}", "plan": "free", "is_vip": False}
+            for i in range(n)]
+    data[pos] = {"id": pos, "user": "渡辺", "plan": "premium", "is_vip": True}
+    return data, "プレミアム会員のユーザー名は誰ですか？", "渡辺", [pos]
+
+
+def gen_mixed_lang(n=150, pos=70):
+    """Mixed JP/EN ticket messages; answer reachable via English error keyword."""
+    fill = ["Thanks, everything works.", "配送ありがとうございました。",
+            "No issues so far.", "問題なく使えています。"]
+    data = [{"id": i, "customer": f"cust{i}", "message": fill[i % len(fill)]}
+            for i in range(n)]
+    data[pos] = {"id": pos, "customer": "松本",
+                 "message": "The payment failed and カードが使えませんでした。"}
+    return data, "支払いに失敗したと報告した顧客は誰ですか？", "松本", [pos]
+
+
+def gen_ambiguous(n=200):
+    """Two errors with different causes; the question disambiguates by cause."""
+    data = [{"id": i, "user": f"user{i}", "status": "支払済"} for i in range(n)]
+    data[64] = {"id": 64, "user": "小林", "status": "エラー", "msg": "在庫切れ"}
+    data[150] = {"id": 150, "user": "加藤", "status": "エラー", "msg": "住所不備"}
+    return data, "在庫切れでエラーになった注文のユーザー名は誰ですか？", "小林", [64]
+
+
+def gen_cheapest(n=200):
+    """The minimum-amount item is at the middle and is only mildly low (not a 2σ
+    outlier). Targets always-keep per-field min/max."""
+    data = [{"id": i, "user": f"user{i}", "amount": 10000 + ((i + 100) % 200)}
+            for i in range(n)]  # min amount (10000) lands at id=100 (middle)
+    return data, "最も金額が低い注文の注文IDは何番ですか？", "100", [100]
+
+
 ALL = [
     gen_rejected_order, gen_high_amount, gen_low_amount, gen_error_log,
     gen_last_error, gen_rare_field, gen_rare_status, gen_search_results,
     gen_long_reviews, gen_nested_envelope, gen_total_sum, gen_count_status,
+    gen_deep_nested, gen_uuid_ids, gen_vip_flag, gen_mixed_lang,
+    gen_ambiguous, gen_cheapest,
 ]
 
 
