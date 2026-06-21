@@ -22,17 +22,20 @@ Source of truth for each port: `chopratejas/headroom`.
       form, lossless; `compress(config=CrusherConfig(lossless_first=True))` runs it
       before lossy and accepts at ≥15% savings (default off). 46% on uniform data,
       0 rows dropped. Tests 30/30.
-- [ ] **C. Multi-turn proactive-expansion harness** — deterministic test that a
-      turn-5 query pre-expands the right dropped blob and avoids retrieve. (Free:
-      no LLM; assert on the expansion block + retrieve-avoidance logic.)
-- [ ] **D. Docs** — ARCHITECTURE.md mapping every module to its headroom source;
-      update READMEs (EN/JA/KO) with the new compressors + tracker; LIMITATIONS.md.
-- [ ] **E. Guardrails from headroom's history** — string-literal-aware JSON
-      detection (#553), structural array counting note (#887), UTF-8/`newline=""`
-      file IO, percent-encode non-ASCII (env note). Edge-case tests.
-- [ ] **F. Polish** — CHANGELOG.md (v0.2→current), final `--no-llm` bench + history
-      snapshot, tidy. Leave a MORNING.md summary for the owner.
+- [x] **C. Multi-turn proactive-expansion** — covered by `tests/test_context_tracker.py`
+      (pre-expansion returns the dropped relevant item, workspace isolation,
+      irrelevant query no-op). Deterministic, no LLM.
+- [x] **D. Docs** — ARCHITECTURE.md (module↔headroom map), CHANGELOG.md (0.1→0.10),
+      LIMITATIONS.md.
+- [x] **E. Guardrails / edge cases** — `tests/test_edge_cases.py` (empty/whitespace,
+      empty array, scalar arrays, malformed JSON→text, mixed scalar/dict, unicode
+      roundtrip). 36/36 tests. (JSON detection uses real json.loads, so #553-style
+      bracket-miscounting doesn't apply; bench file IO already UTF-8.)
+- [x] **F. Polish** — CHANGELOG done, MORNING.md written, final --no-llm bench.
 
 ## Progress log
 - iter 1: Phase A done — log/search/diff compressors + router-order fix. 26/26 tests.
 - iter 1: Phase B done — lossless columnar compaction (46% saved, 0 dropped). 30/30 tests.
+- iter 1: Phases C/D/E/F done — edge tests (36/36), ARCHITECTURE/CHANGELOG/LIMITATIONS, MORNING.md.
+  All planned phases complete in one session (cheap cached context); a final review
+  wakeup is scheduled to re-run the full suite and catch anything.

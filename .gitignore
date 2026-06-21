@@ -13,3 +13,4 @@ venv/
 *.log
 benchmarks/results/
 .env
+benchmarks/results/
