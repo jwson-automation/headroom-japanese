@@ -28,7 +28,10 @@ def test_kana_words_not_destroyed():
     # B1 regression: single-kana particles must not split pure-hiragana words.
     assert keywords("はな") == {"はな"}        # 花/鼻 — both chars are particles
     assert keywords("たかい") == {"たかい"}    # 高い — た=ending, か=particle
-    assert "新しいパソコン" in keywords("新しいパソコンが欲しい")
+    # script-boundary split now separates the katakana noun (intended), while the
+    # kanji+okurigana adjective stays whole.
+    kw = keywords("新しいパソコンが欲しい")
+    assert "新しい" in kw and "パソコン" in kw
 
 
 def test_meaningful_split_still_works():
@@ -36,3 +39,11 @@ def test_meaningful_split_still_works():
     kw = keywords("注文が拒否された")
     assert "注文" in kw
     assert "拒否" in kw
+
+
+def test_script_boundary_split():
+    # kanji↔katakana boundary splits; okurigana stays attached to its kanji.
+    assert keywords("返品ステータス") == {"返品", "ステータス"}
+    assert "新しい" in keywords("新しいパソコン")   # okurigana not broken off
+    assert "パソコン" in keywords("新しいパソコン")
+    assert keywords("食べる") == {"食べる"}          # verb stem + okurigana intact

@@ -21,7 +21,7 @@ from .router import detect
 from .tokens import count_tokens
 from .types import CompressResult
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Minimum input tokens worth compressing (matches headroom's min_tokens_to_crush).
 MIN_TOKENS_TO_CRUSH = 200

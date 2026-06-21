@@ -22,9 +22,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import os
 from datetime import datetime
 
-from headroom_ja import compress
+from headroom_ja import __version__, compress
 from headroom_ja.tokens import BACKEND
 
 from . import datasets
@@ -89,8 +90,17 @@ def run(use_llm: bool, out_path: str | None, md_path: str | None):
         print(f"\nwrote {len(rows)} rows -> {out_path}")
 
     if use_llm and md_path:
-        _write_markdown(rows, md_path)
-        print(f"wrote report -> {md_path}")
+        md = _render_markdown(rows)
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(md)
+        print(f"wrote latest report -> {md_path}")
+        # History: never overwrite — every run is kept as its own snapshot.
+        os.makedirs("benchmarks/history", exist_ok=True)
+        label = f"{__version__}_{datetime.now().strftime('%Y%m%d-%H%M')}"
+        hist = f"benchmarks/history/{label}.md"
+        with open(hist, "w", encoding="utf-8") as f:
+            f.write(md)
+        print(f"wrote history snapshot -> {hist}")
 
     return rows
 
@@ -126,7 +136,7 @@ def _print_summary(rows, use_llm):
     print("=" * 64)
 
 
-def _write_markdown(rows, path):
+def _render_markdown(rows) -> str:
     n = len(rows)
     mean_ratio = sum(r["ratio"] for r in rows) / n
     kept_rows = [r for r in rows if r["answer_kept"] is not None]
@@ -145,8 +155,8 @@ def _write_markdown(rows, path):
     L = []
     L.append("# headroom-japanese — benchmark")
     L.append("")
-    L.append(f"Generated: {stamp} · answerer: `{answerer}` · judge: `{judge}` · "
-             f"token backend: `{backend}`")
+    L.append(f"Generated: {stamp} · lib `v{__version__}` · answerer: `{answerer}` · "
+             f"judge: `{judge}` · token backend: `{backend}`")
     L.append("")
     L.append("Each case asks the **same Japanese question twice** — once on the full "
              "tool output, once on the compressed output — and an LLM judge grades each "
@@ -188,8 +198,7 @@ def _write_markdown(rows, path):
                  f"{yn(r['compressed_correct'])} |")
         L.append("")
 
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(L) + "\n")
+    return "\n".join(L) + "\n"
 
 
 def main():

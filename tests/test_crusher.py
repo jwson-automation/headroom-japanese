@@ -76,6 +76,25 @@ def test_small_input_passthrough():
     assert r.ratio == 0.0
 
 
+def test_rare_value_kept_by_relevance():
+    # A rare status value (no error keyword) is reachable via the query keyword,
+    # now that 返品ステータス splits into 返品 + ステータス.
+    data = [{"id": i, "user": f"u{i}", "status": "支払済"} for i in range(100)]
+    data[60] = {"id": 60, "user": "鈴木", "status": "返品"}
+    keep, _ = crush_array(data, query="返品ステータスの注文", cfg=CrusherConfig())
+    assert 60 in keep
+
+
+def test_generic_word_does_not_pollute_relevance():
+    # A word in every item (記事) must NOT mark the whole array relevant; the real
+    # answer (matched by a rare word) must survive and compression must still happen.
+    data = [{"id": i, "title": f"記事{i}", "body": "一般的な内容"} for i in range(60)]
+    data[40] = {"id": 40, "title": "Python非同期処理", "body": "asyncioの解説"}
+    keep, dropped = crush_array(data, query="Pythonの記事", cfg=CrusherConfig())
+    assert 40 in keep            # rare-word match survives
+    assert len(keep) < 30        # 記事 did not keep everything
+
+
 def test_small_array_untouched():
     data = [{"id": i} for i in range(3)]
     keep, dropped = crush_array(data, None, CrusherConfig())

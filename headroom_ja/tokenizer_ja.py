@@ -79,19 +79,59 @@ def tokenize_ja(text: str) -> list[tuple[str, str]]:
     return out
 
 
-def keywords(text: str) -> set[str]:
-    """Return only content words (keywords). Used for relevance matching.
+def _char_class(ch: str) -> str:
+    o = ord(ch)
+    if 0x3040 <= o <= 0x309f:
+        return "H"  # hiragana
+    if 0x30a0 <= o <= 0x30ff or 0xff66 <= o <= 0xff9f:
+        return "A"  # katakana
+    if 0x4e00 <= o <= 0x9fff or 0x3400 <= o <= 0x4dbf:
+        return "K"  # kanji
+    if ch.isascii() and ch.isalnum():
+        return "L"  # latin / digit
+    return "O"
 
-    Drops stray single hiragana characters left over from splitting.
+
+def _subtokens(s: str) -> list[str]:
+    """Split a keyword at script boundaries so 返品ステータス -> [返品, ステータス].
+
+    Okurigana is preserved: a hiragana run directly after a kanji run joins it
+    (食べる stays whole, 新しい stays whole), but katakana / latin runs always
+    break off into their own tokens.
+    """
+    runs: list[list[str]] = []
+    for ch in s:
+        c = _char_class(ch)
+        if runs and runs[-1][0] == c:
+            runs[-1][1] += ch
+        else:
+            runs.append([c, ch])
+    toks: list[str] = []
+    last: str | None = None
+    for c, text in runs:
+        if c == "H" and toks and last == "K":
+            toks[-1] += text  # okurigana joins its kanji stem; stays kanji-class
+        else:
+            toks.append(text)
+            last = c
+    return toks
+
+
+def keywords(text: str) -> set[str]:
+    """Return content words (keywords) for relevance matching.
+
+    Splits glued cross-script words at script boundaries and drops stray single
+    hiragana characters left over from grammatical splitting.
     """
     out: set[str] = set()
     for t, ty in tokenize_ja(text):
         if ty != "keyword":
             continue
-        t = t.strip()
-        if not t:
-            continue
-        if len(t) == 1 and _is_hiragana(t):  # leftover grammatical noise
-            continue
-        out.add(t)
+        for sub in _subtokens(t):
+            sub = sub.strip()
+            if not sub:
+                continue
+            if len(sub) == 1 and _is_hiragana(sub):  # leftover grammatical noise
+                continue
+            out.add(sub)
     return out
