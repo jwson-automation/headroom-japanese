@@ -49,3 +49,5 @@ Source of truth for each port: `chopratejas/headroom`.
   (second_highest). v0.12.0. 40/40 tests, bench answer_kept 95% (1 honest gap).
 - iter 4: keep_top_k config (default 1=min/max; 2 keeps the runner-up) to close
   the second-highest ranking gap on demand. v0.13.0. 41/41 tests.
+- iter 5: CodeCompressor docstring_mode (remove default / first_line / full),
+  like headroom DocstringMode; keeps a one-line function-purpose hint. v0.14.0. 44/44 tests.

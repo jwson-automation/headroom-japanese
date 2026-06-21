@@ -55,3 +55,24 @@ def test_compress_routes_code():
 
 def test_plain_text_not_code():
     assert detect("これはただの日本語の文章です。\n二行目。\n三行目。") == "text"
+
+
+def test_docstring_mode_first_line():
+    out, _, _ = compress_code(_PY, docstring_mode="first_line")
+    assert "Add two numbers." in out   # docstring hint kept
+    assert "total = a + b" not in out  # body still dropped
+    assert "..." in out
+
+
+def test_docstring_mode_remove_is_default():
+    out, _, _ = compress_code(_PY)      # default = remove
+    assert "Add two numbers." not in out
+    assert "def add(a: int, b: int) -> int:" in out
+
+
+def test_docstring_mode_full():
+    src = ('def f(x):\n    """Line one.\n    Line two.\n    """\n'
+           '    a = 1\n    return a\n')
+    out, _, _ = compress_code(src, docstring_mode="full")
+    assert "Line one." in out and "Line two." in out
+    assert "a = 1" not in out

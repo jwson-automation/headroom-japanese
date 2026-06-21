@@ -129,13 +129,51 @@ _FUNC_SIG = re.compile(
 )
 
 
-def compress_code(text: str):
+def _leading_docstring(body: list[str]):
+    """Return (start, end, quote) of a leading Python docstring in a body, or None.
+    `body` is the list of body lines (already indented under the signature)."""
+    for j, bl in enumerate(body):
+        if bl.strip() == "":
+            continue
+        s = bl.strip()
+        if s[:3] in ('"""', "'''"):
+            q = s[:3]
+            if len(s) >= 6 and s[3:].rstrip().endswith(q):
+                return j, j, q          # single-line docstring
+            for k in range(j + 1, len(body)):
+                if body[k].strip().endswith(q):
+                    return j, k, q       # multi-line
+            return j, len(body) - 1, q   # unterminated
+        return None                      # first real line isn't a docstring
+    return None
+
+
+def _emit_body(body: list[str], sig_indent: int, docstring_mode: str):
+    """Return (kept_lines, dropped_count) for one function body."""
+    pad = " " * (sig_indent + 4)
+    if docstring_mode in ("first_line", "full"):
+        span = _leading_docstring(body)
+        if span is not None:
+            start, end, q = span
+            if docstring_mode == "full" or start == end:
+                kept = body[start:end + 1]
+            else:  # first_line of a multi-line docstring, re-wrapped as one line
+                first = body[start].strip()[3:].strip() or body[start + 1].strip()
+                kept = [pad + q + first + q]
+            return kept + [pad + "..."], len(body) - len(kept)
+    return [pad + "..."], len(body)
+
+
+def compress_code(text: str, docstring_mode: str = "remove"):
     """Keep imports / signatures / class & top-level lines; drop function bodies.
 
     Line-based heuristic mirroring headroom's CodeCompressor intent (which uses
-    tree-sitter). No parser, no deps: a function body is the run of lines more
-    indented than its signature; it collapses to a single `...`. Imports, class
-    declarations, decorators, type/interface lines and module-level code stay.
+    tree-sitter). A function body is the run of lines more indented than its
+    signature; it collapses to a single `...`. Imports, class declarations,
+    decorators, type/interface lines and module-level code stay.
+
+    docstring_mode (headroom's DocstringMode): "remove" (default), "first_line"
+    (keep the first docstring line as a one-line hint), or "full".
     """
     lines = text.splitlines()
     n = len(lines)
@@ -149,21 +187,18 @@ def compress_code(text: str):
             out.append(line)  # signature line
             sig_indent = len(m.group(1))
             i += 1
-            body = 0
+            body: list[str] = []
             while i < n:
                 bl = lines[i]
-                if bl.strip() == "":
+                if bl.strip() == "" or len(bl) - len(bl.lstrip()) > sig_indent:
+                    body.append(bl)
                     i += 1
-                    body += 1
-                    continue
-                if len(bl) - len(bl.lstrip()) > sig_indent:
-                    i += 1
-                    body += 1
                     continue
                 break
             if body:
-                out.append(" " * (sig_indent + 4) + "...")
-                body_dropped += body
+                kept_lines, dropped = _emit_body(body, sig_indent, docstring_mode)
+                out.extend(kept_lines)
+                body_dropped += dropped
             continue
         out.append(line)
         i += 1
