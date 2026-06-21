@@ -22,7 +22,7 @@ from .router import detect
 from .tokens import count_tokens
 from .types import CompressResult
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 # Minimum input tokens worth compressing (matches headroom's min_tokens_to_crush).
 MIN_TOKENS_TO_CRUSH = 200
@@ -60,9 +60,16 @@ def compress(
     query: str | None = None,
     config: CrusherConfig | None = None,
     reversible: bool = True,
+    *,
+    turn: int | None = None,
+    workspace: str = "",
+    tool_name: str | None = None,
 ) -> CompressResult:
     """Classify the content, then compress per type. v1 compresses JSON arrays,
-    including the largest array inside a top-level JSON object (API envelopes)."""
+    including the largest array inside a top-level JSON object (API envelopes).
+
+    Pass turn + workspace to register the compression with the proactive-expansion
+    tracker (multi-turn), so a later query can pre-expand the dropped originals."""
     cfg = config or CrusherConfig()
     kind = detect(content)
     orig_tok = count_tokens(content)
@@ -124,6 +131,14 @@ def compress(
     if comp_tok >= orig_tok:
         return passthrough("json")
 
+    # Register with the proactive-expansion tracker (multi-turn) if asked.
+    if turn is not None and cache_key is not None:
+        from .context_tracker import get_context_tracker
+        get_context_tracker().track_compression(
+            cache_key, turn, tool_name, len(arr), len(keep),
+            workspace_key=workspace, query_context=query or "", sample_content=out,
+        )
+
     return CompressResult(
         text=out,
         original_tokens=orig_tok,
@@ -135,12 +150,23 @@ def compress(
     )
 
 
+def proactive_expand(query: str, *, turn: int | None = None, workspace: str = ""):
+    """Multi-turn: given a new query, pre-expand dropped originals that are now
+    relevant. Returns (context_block_text, recommendations). Prepend the block to
+    the next turn's context so the model rarely needs to call retrieve."""
+    from .context_tracker import get_context_tracker
+    t = get_context_tracker()
+    recs = t.analyze_query(query, current_turn=turn, workspace_key=workspace)
+    exps = t.execute_expansions(recs)
+    return t.format_expansions_for_context(exps), recs
+
+
 def retrieve(key: str, query: str | None = None, limit: int = 50) -> list:
     """Fetch originals dropped during compression, by key (called when the LLM needs more)."""
     return STORE.retrieve(key, query, limit)
 
 
 __all__ = [
-    "compress", "retrieve", "CompressResult",
+    "compress", "retrieve", "proactive_expand", "CompressResult",
     "CrusherConfig", "detect", "count_tokens", "STORE",
 ]
