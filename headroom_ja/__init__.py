@@ -22,7 +22,7 @@ from .router import detect
 from .tokens import count_tokens
 from .types import CompressResult
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 # Minimum input tokens worth compressing (matches headroom's min_tokens_to_crush).
 MIN_TOKENS_TO_CRUSH = 200
@@ -77,13 +77,22 @@ def compress(
     def passthrough(ct: str) -> CompressResult:
         return CompressResult(content, orig_tok, orig_tok, content_type=ct)
 
-    if kind != "json":
-        # v1: pass everything non-JSON through (log/search/diff come later)
-        return passthrough(kind)
-
     # Too small to bother — avoids adding a marker for no benefit.
     if orig_tok < MIN_TOKENS_TO_CRUSH:
-        return passthrough("json")
+        return passthrough(kind)
+
+    # Line-based content types (logs / search results / diffs).
+    if kind in ("log", "search", "diff"):
+        from .text_compress import HANDLERS
+        out, total, kept = HANDLERS[kind](content)
+        comp_tok = count_tokens(out)
+        if comp_tok >= orig_tok:
+            return passthrough(kind)
+        return CompressResult(out, orig_tok, comp_tok, content_type=kind,
+                              kept=kept, dropped=total - kept)
+
+    if kind != "json":
+        return passthrough(kind)
 
     data = json.loads(content)
 

@@ -28,16 +28,17 @@ def detect(content: str) -> str:
         except (json.JSONDecodeError, ValueError):
             pass
 
-    # 2) Search results (file:line:)
-    if _RE_SEARCH.search(s):
-        return "search"
-
-    # 3) Unified diff
+    # 2) Unified diff
     if s.startswith(("diff --git", "--- ", "@@ ")):
         return "diff"
 
-    # 4) Logs (timestamp + level)
+    # 3) Logs (timestamp + level) — checked BEFORE search, because a timestamp
+    #    like "10:00:42" otherwise matches the file:line: search pattern.
     if _RE_TS.search(s) and _RE_LOGLEVEL.search(s):
         return "log"
+
+    # 4) Search results (file:line:)
+    if _RE_SEARCH.search(s):
+        return "search"
 
     return "text"
