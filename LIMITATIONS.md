@@ -23,6 +23,14 @@ answer is already visible (wastes tokens; answer stays correct). Prompt wording
 barely moves this (~6–7/19, varies run to run). The deterministic control is
 `context_tracker` proactive expansion, not prompting.
 
+## Ranking beyond the extremes
+We always keep each numeric field's **min and max**, so "cheapest"/"most
+expensive" work. But the **2nd/3rd-highest** (runner-up) at a middle position,
+when it isn't a 2σ outlier, gets dropped (`gen_second_highest` — answer_kept
+False). Top-K ranking needs either retrieve or a `keep_top_k` option (not yet
+implemented). Median and other order-statistics likewise need retrieve
+(`gen_median`); the optional summary carries avg, not median.
+
 ## Rule-based Japanese tokenizer
 No morphological analyzer. Splits on function words + script boundaries. Fails
 when a particle is glued inside a kana word, or for novel segmentation. Mitigated

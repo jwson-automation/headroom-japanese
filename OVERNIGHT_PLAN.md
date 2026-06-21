@@ -42,3 +42,8 @@ Source of truth for each port: `chopratejas/headroom`.
 - iter 2: code compressor (headroom CodeCompressor concept, line-based) — keep
   imports/signatures/class, drop function bodies -> `...`; router detects `code`.
   v0.11.0. 40/40 tests.
+- iter 3: +4 adversarial datasets (second_highest, nested_two_arrays,
+  item_nested_field, median). FOUND + FIXED a real bug: relevance matched JSON
+  KEY NAMES (query 'tier' kept every item -> 0% compression); now matches VALUES
+  only (item_nested_field 0%->92%). Documented ranking-beyond-extremes gap
+  (second_highest). v0.12.0. 40/40 tests, bench answer_kept 95% (1 honest gap).

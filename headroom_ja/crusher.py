@@ -174,13 +174,40 @@ def _structural_outliers(data, pool, core_fraction) -> set[int]:
     return {i for i, d in dicts if rare & set(d.keys())}
 
 
+def _values_text(obj) -> str:
+    """Concatenate an item's VALUES (recursively), excluding JSON key names.
+
+    Relevance must match content, not structure: a query word like 'tier' that is
+    a key present on every item would otherwise mark the whole array relevant and
+    defeat compression (key-name pollution, sibling of the 記事 value problem)."""
+    parts: list[str] = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+        elif isinstance(o, bool):
+            parts.append(str(o))
+        elif isinstance(o, (int, float)):
+            parts.append(str(o))
+        elif isinstance(o, str):
+            parts.append(o)
+
+    walk(obj)
+    return " ".join(parts)
+
+
 def _relevant(data, pool, query, threshold) -> set[int]:
     """Items relevant to the query, scored with headroom's graded relevance
-    (see headroom_ja.relevance, ported from headroom's ccr/context_tracker.py)."""
+    (see headroom_ja.relevance, ported from headroom's ccr/context_tracker.py).
+    Scored against item VALUES only, so key names don't pollute the match."""
     qk = _rel.query_keywords(query)
     if not qk:
         return set()
-    return {i for i in pool if _rel.score(qk, _dumps(data[i])) >= threshold}
+    return {i for i in pool if _rel.score(qk, _values_text(data[i])) >= threshold}
 
 
 def _even_sample(pool: list[int], k: int) -> list[int]:

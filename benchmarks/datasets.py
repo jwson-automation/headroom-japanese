@@ -196,12 +196,50 @@ def gen_cheapest(n=200):
     return data, "最も金額が低い注文の注文IDは何番ですか？", "100", [100]
 
 
+# ── round D: probe NEW limits (some are expected to fail honestly) ─────────
+
+def gen_second_highest(n=200):
+    """2nd-highest value at a middle position, not a 2σ outlier. We keep per-field
+    min/max but not the runner-up -> probes ranking beyond extremes."""
+    data = [{"id": i, "user": f"user{i}", "amount": 10000 + ((i + 100) % 200)}
+            for i in range(n)]  # max 10199 at id=99, 2nd 10198 at id=98 (both middle)
+    return data, "2番目に高い金額の注文の注文IDは何番ですか？", "98", [98]
+
+
+def gen_nested_two_arrays(n_big=200, n_small=20):
+    """Envelope with TWO arrays; the answer is in the SMALLER one. We only compress
+    the largest array -> probes multi-array envelopes."""
+    orders = [{"id": i, "user": f"user{i}", "amount": 5000} for i in range(n_big)]
+    vips = [{"id": 1000 + i, "user": f"vip{i}", "rank": "gold"} for i in range(n_small)]
+    vips[5] = {"id": 1005, "user": "会長", "rank": "platinum"}
+    data = {"orders": orders, "vips": vips}
+    return data, "platinumランクのVIPのユーザー名は誰ですか？", "会長", [1005]
+
+
+def gen_item_nested_field(n=200, pos=130):
+    """Answer lives in a nested field of one item (meta.tier). Top-level rare-value
+    detection won't see it -> probes nested item fields (relevance must carry it)."""
+    data = [{"id": i, "user": f"user{i}", "meta": {"region": "東京", "tier": "一般"}}
+            for i in range(n)]
+    data[pos] = {"id": pos, "user": "重役", "meta": {"region": "大阪", "tier": "VIP"}}
+    return data, "VIP tierのユーザー名は誰ですか？", "重役", [pos]
+
+
+def gen_median(n=41):
+    """Median query. The summary carries avg, not median, and lossy drops the
+    middle rows -> probes an aggregate retrieve must recover."""
+    data = [{"id": i, "user": f"user{i}", "amount": 1000 + i * 10} for i in range(n)]
+    median = sorted(d["amount"] for d in data)[n // 2]
+    return data, "金額の中央値はいくらですか？数字で答えてください。", str(median), []
+
+
 ALL = [
     gen_rejected_order, gen_high_amount, gen_low_amount, gen_error_log,
     gen_last_error, gen_rare_field, gen_rare_status, gen_search_results,
     gen_long_reviews, gen_nested_envelope, gen_total_sum, gen_count_status,
     gen_deep_nested, gen_uuid_ids, gen_vip_flag, gen_mixed_lang,
     gen_ambiguous, gen_cheapest, gen_filtered_sum,
+    gen_second_highest, gen_nested_two_arrays, gen_item_nested_field, gen_median,
 ]
 
 
