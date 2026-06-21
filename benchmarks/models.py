@@ -33,21 +33,69 @@ def _text(resp) -> str:
 
 
 _ANSWER_SYSTEM = (
-    "あなたはツール出力のJSONデータを読み、ユーザーの質問に日本語で簡潔に答えるアシスタントです。"
-    "答えがデータに含まれていない場合は「不明」とだけ答えてください。余計な説明はしないでください。"
+    "あなたはツール出力のJSONデータを読み、質問に日本語で簡潔に答えるアシスタントです。"
+    "まず、表示されている行だけで答えられるか必ず確認してください。"
+    "特定の1件を探す質問（誰が・どれが・何番）は、その行が表示されていれば"
+    "そのまま答え、retrieve_original は絶対に呼ばないでください。"
+    "retrieve_original を呼んでよいのは次の2つの場合だけです: "
+    "(1) 合計・件数・平均などの集計で『N件 省略』により全件が必要なとき、"
+    "(2) 探している具体的な項目が表示行のどこにも見当たらないとき。"
+    "フィルタ付き集計（例: ある条件の合計）では query を付けずに全件取得し、"
+    "自分で条件を絞って計算してください。"
+    "答えが見つからなければ「不明」とだけ答えてください。余計な説明はしないでください。"
 )
 
+_RETRIEVE_TOOL = {
+    "name": "retrieve_original",
+    "description": (
+        "圧縮で省略された元データを取り戻す。合計・件数・フィルタ集計など、"
+        "表示中の一部の行だけでは正確に答えられない時に呼ぶ。"
+        "query を渡すと関連行だけ、省略すると全件を返す。"
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "絞り込みキーワード（任意・全件なら省略）"},
+        },
+    },
+}
 
-def answer(question: str, context: str) -> str:
-    """Answer the question using the given (full or compressed) context."""
-    resp = _get_client().messages.create(
-        model=ANSWERER,
-        max_tokens=1024,
-        system=_ANSWER_SYSTEM,
-        messages=[{"role": "user",
-                   "content": f"# データ\n{context}\n\n# 質問\n{question}"}],
-    )
-    return _text(resp)
+
+def answer(question: str, context: str, cache_key: str | None = None):
+    """Answer the question. If cache_key is given, expose a retrieve tool so the
+    model can pull back the dropped originals when the compressed view is
+    insufficient. Returns (answer_text, retrieve_called)."""
+    from headroom_ja import retrieve as _retrieve
+
+    client = _get_client()
+    tools = [_RETRIEVE_TOOL] if cache_key else []
+    messages = [{"role": "user",
+                 "content": f"# データ\n{context}\n\n# 質問\n{question}"}]
+    retrieve_called = False
+
+    for _ in range(4):  # bounded agentic loop
+        kwargs = dict(model=ANSWERER, max_tokens=1024,
+                      system=_ANSWER_SYSTEM, messages=messages)
+        if tools:
+            kwargs["tools"] = tools
+        resp = client.messages.create(**kwargs)
+
+        if resp.stop_reason == "tool_use":
+            messages.append({"role": "assistant", "content": resp.content})
+            results = []
+            for b in resp.content:
+                if b.type == "tool_use" and b.name == "retrieve_original":
+                    retrieve_called = True
+                    q = (b.input or {}).get("query")
+                    items = _retrieve(cache_key, q, limit=100000)
+                    results.append({"type": "tool_result", "tool_use_id": b.id,
+                                    "content": json.dumps(items, ensure_ascii=False)})
+            messages.append({"role": "user", "content": results})
+            continue
+
+        return _text(resp), retrieve_called
+
+    return _text(resp), retrieve_called
 
 
 _JUDGE_SCHEMA = {

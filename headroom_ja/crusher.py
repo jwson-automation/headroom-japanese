@@ -42,7 +42,9 @@ class CrusherConfig:
     rare_value_fraction: float = 0.1  # categorical value in <= this fraction = rare
     rare_value_max_distinct: int = 50  # skip high-cardinality (id-like) fields
     keep_numeric_extremes: bool = True  # always keep per-field min & max items
-    include_summary: bool = True       # emit whole-array aggregates (count/sum/freq)
+    include_summary: bool = False      # optional cheap aggregates; the general path
+                                       # for aggregation is the retrieve() loop
+
     summary_max_distinct: int = 20     # categorical freq only below this cardinality
 
 

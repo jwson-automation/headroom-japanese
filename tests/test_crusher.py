@@ -99,7 +99,8 @@ def test_summary_embeds_aggregates():
     # Aggregation answerability: sum and value-counts survive lossy row-drop.
     data = [{"id": i, "user": f"u{i}", "amount": 1000 + i,
              "status": "キャンセル" if i % 10 == 0 else "支払済"} for i in range(40)]
-    r = compress(json.dumps(data, ensure_ascii=False))
+    r = compress(json.dumps(data, ensure_ascii=False),
+                 config=CrusherConfig(include_summary=True))
     assert r.dropped > 0
     assert "_集計_全体" in r.text
     assert str(sum(d["amount"] for d in data)) in r.text         # true total present

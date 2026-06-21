@@ -69,8 +69,8 @@ def run(use_llm: bool, out_path: str | None, md_path: str | None):
 
         if use_llm:
             from . import models
-            a_full = models.answer(question, content)
-            a_comp = models.answer(question, r.text)
+            a_full, _ = models.answer(question, content)
+            a_comp, retrieved = models.answer(question, r.text, cache_key=r.cache_key)
             j_full = models.judge(question, gold, a_full)
             j_comp = models.judge(question, gold, a_comp)
             row.update({
@@ -78,6 +78,7 @@ def run(use_llm: bool, out_path: str | None, md_path: str | None):
                 "answer_compressed": a_comp,
                 "full_correct": j_full["correct"],
                 "compressed_correct": j_comp["correct"],
+                "retrieve_called": retrieved,   # over-compression signal
                 "quality_delta": int(j_comp["correct"]) - int(j_full["correct"]),
                 "judge_model": models.JUDGE,
                 "answerer_model": models.ANSWERER,
@@ -115,7 +116,8 @@ def _print_row(row, use_llm):
     base = (f"[{row['dataset']:<20}] {row['original_tokens']:>6} -> "
             f"{row['compressed_tokens']:>5} tok  ({row['ratio']:>5.0%})  kept={kept}")
     if use_llm:
-        base += f"  full={row['full_correct']}  comp={row['compressed_correct']}"
+        rtr = " +retrieve" if row.get("retrieve_called") else ""
+        base += f"  full={row['full_correct']}  comp={row['compressed_correct']}{rtr}"
     print(base)
 
 
@@ -135,6 +137,9 @@ def _print_summary(rows, use_llm):
             retention = sum(r["compressed_correct"] for r in answerable) / len(answerable)
             print(f"retention         : {retention:.0%}  "
                   f"(compressed correct, of {len(answerable)} answerable on full)")
+        retr = [r for r in rows if r.get("retrieve_called")]
+        print(f"retrieve used     : {len(retr)}/{len(rows)}  "
+              f"({[r['dataset'] for r in retr]})")
         failures = [r for r in rows if r["full_correct"] and not r["compressed_correct"]]
         if failures:
             print(f"compression-caused failures: {[r['dataset'] for r in failures]}")
@@ -176,12 +181,13 @@ def _render_markdown(rows) -> str:
     L.append(f"- **retention** (compressed still correct, of {len(answerable)} answerable "
              f"on full context): **{retention:.0%}**")
     L.append("")
-    L.append("| dataset | savings | full | compressed | answer_kept |")
-    L.append("|---|---|:---:|:---:|:---:|")
+    L.append("| dataset | savings | full | compressed | retrieve | answer_kept |")
+    L.append("|---|---|:---:|:---:|:---:|:---:|")
     for r in rows:
         kept = "n/a" if r["answer_kept"] is None else yn(r["answer_kept"])
+        rtr = "🔄" if r.get("retrieve_called") else ""
         L.append(f"| {r['dataset']} | {r['ratio']:.0%} | {yn(r['full_correct'])} | "
-                 f"{yn(r['compressed_correct'])} | {kept} |")
+                 f"{yn(r['compressed_correct'])} | {rtr} | {kept} |")
     L.append("")
     L.append("## Transcripts")
     L.append("")
@@ -198,6 +204,7 @@ def _render_markdown(rows) -> str:
                  f"(**{r['ratio']:.0%}** saved · kept {r['kept']} / dropped {r['dropped']})")
         kept = "n/a (集計のため単一item無し)" if r["answer_kept"] is None else str(r["answer_kept"])
         L.append(f"- **answer_kept**: {kept}")
+        L.append(f"- **retrieve呼び出し**: {'はい (省略された元データを取り戻して計算)' if r.get('retrieve_called') else 'いいえ (圧縮テキストだけで回答)'}")
         L.append("")
         L.append("**回答 (answers):**")
         L.append("")

@@ -129,6 +129,16 @@ def gen_count_status(n=200):
     return data, "キャンセルされた注文は全部で何件ですか？", str(len(cancel_ids)), []
 
 
+def gen_filtered_sum(n=60):
+    """FILTERED aggregate: sum of amounts for one status only. A generic summary
+    (total amount + status counts) cannot answer this — only retrieving the
+    originals and summing the matching rows can."""
+    data = [{"id": i, "user": f"user{i}", "amount": 1000 + i,
+             "status": "キャンセル" if i % 5 == 0 else "支払済"} for i in range(n)]
+    total = sum(d["amount"] for d in data if d["status"] == "キャンセル")
+    return data, "キャンセルされた注文の合計金額はいくらですか？数字で答えてください。", str(total), []
+
+
 # ── round C: harder / structurally diverse ─────────────────────────────────
 
 def gen_deep_nested(n=200, pos=88):
@@ -191,7 +201,7 @@ ALL = [
     gen_last_error, gen_rare_field, gen_rare_status, gen_search_results,
     gen_long_reviews, gen_nested_envelope, gen_total_sum, gen_count_status,
     gen_deep_nested, gen_uuid_ids, gen_vip_flag, gen_mixed_lang,
-    gen_ambiguous, gen_cheapest,
+    gen_ambiguous, gen_cheapest, gen_filtered_sum,
 ]
 
 
