@@ -22,7 +22,7 @@ from .router import detect
 from .tokens import count_tokens
 from .types import CompressResult
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 # Minimum input tokens worth compressing (matches headroom's min_tokens_to_crush).
 MIN_TOKENS_TO_CRUSH = 200
@@ -108,6 +108,24 @@ def compress(
             return passthrough("json")
         parent, key, arr = found
         rewrap = (work, parent, key)
+
+    # Lossless-first: if the array is cleanly tabular and columnar compaction
+    # saves enough, use it — no rows dropped, no retrieve ever needed.
+    if cfg.lossless_first:
+        from .compaction import compact
+        packed = compact(arr, cfg.core_field_fraction)
+        if packed is not None:
+            if rewrap is not None:
+                work, parent, key = rewrap
+                parent[key] = packed
+                packed_text = json.dumps(work, ensure_ascii=False)
+            else:
+                packed_text = json.dumps(packed, ensure_ascii=False)
+            packed_tok = count_tokens(packed_text)
+            if packed_tok < orig_tok and \
+                    1 - packed_tok / orig_tok >= cfg.lossless_min_savings_ratio:
+                return CompressResult(packed_text, orig_tok, packed_tok,
+                                      content_type="json", kept=len(arr), dropped=0)
 
     keep, dropped = crush_array(arr, query, cfg)
     kept_items = [arr[i] for i in keep]

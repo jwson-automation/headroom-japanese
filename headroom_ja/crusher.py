@@ -43,6 +43,9 @@ class CrusherConfig:
     keep_numeric_extremes: bool = True  # always keep per-field min & max items
     include_summary: bool = False      # optional cheap aggregates; the general path
                                        # for aggregation is the retrieve() loop
+    lossless_first: bool = False       # try lossless columnar compaction before
+                                       # the lossy row-drop path (headroom-style)
+    lossless_min_savings_ratio: float = 0.15  # accept compaction only above this
 
     summary_max_distinct: int = 20     # categorical freq only below this cardinality
 

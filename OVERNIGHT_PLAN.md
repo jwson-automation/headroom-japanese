@@ -18,10 +18,10 @@ Source of truth for each port: `chopratejas/headroom`.
       - SearchCompressor: `file:line:content`, dedup by file, keep matches
       - DiffCompressor: keep hunk headers + changed lines, trim context
       Wire into `compress()` via the router. Tests + bench datasets.
-- [ ] **B. Lossless columnar compaction** — headroom tries lossless CSV/KV BEFORE
-      lossy row-drop (compaction/compactor.rs). Port: array-of-objects with shared
-      core keys → header + rows; accept if it saves ≥15% (lossless_min_savings_ratio).
-      Run before `crush_array`. Tests.
+- [x] **B. Lossless columnar compaction** — DONE. `compaction.py`: columns+rows
+      form, lossless; `compress(config=CrusherConfig(lossless_first=True))` runs it
+      before lossy and accepts at ≥15% savings (default off). 46% on uniform data,
+      0 rows dropped. Tests 30/30.
 - [ ] **C. Multi-turn proactive-expansion harness** — deterministic test that a
       turn-5 query pre-expands the right dropped blob and avoids retrieve. (Free:
       no LLM; assert on the expansion block + retrieve-avoidance logic.)
@@ -35,3 +35,4 @@ Source of truth for each port: `chopratejas/headroom`.
 
 ## Progress log
 - iter 1: Phase A done — log/search/diff compressors + router-order fix. 26/26 tests.
+- iter 1: Phase B done — lossless columnar compaction (46% saved, 0 dropped). 30/30 tests.
