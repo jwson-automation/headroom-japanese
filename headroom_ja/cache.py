@@ -31,13 +31,19 @@ class CCRStore:
         return key
 
     def retrieve(self, key: str, query: str | None = None, limit: int = 50) -> list:
-        """Fetch the original by key. With a query, keep only keyword-overlapping items."""
+        """Fetch the original by key. With a query, keep only keyword-overlapping items.
+
+        If the query tokenizes to no keywords (e.g. an all-hiragana query), fall
+        back to returning the originals rather than silently returning nothing.
+        """
         items = self._store.get(key)
         if items is None:
             return []
         if not query:
             return items[:limit]
         q = keywords(query)
+        if not q:  # query produced no usable keywords -> do not filter to empty
+            return items[:limit]
         hits = [
             it for it in items
             if q & keywords(json.dumps(it, ensure_ascii=False))

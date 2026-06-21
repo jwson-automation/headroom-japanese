@@ -4,9 +4,12 @@ Principle: a Japanese sentence = content word + function word + content word ...
     Cut whenever a function word (particle / conjunction / verb ending /
     punctuation) appears. Whatever sits between is a keyword.
 
-Limitation: a particle embedded inside a word as a bare character gets
-    mis-split (e.g. the が in 長い). Risk is low for kanji-noun-heavy data.
-    Swap in fugashi if you need real accuracy.
+Over-splitting guard: a single-character hiragana particle (が, に, は, で, ...)
+    also appears *inside* content words (はな, たかい, 名前). We only treat such a
+    particle as a delimiter when the preceding character is a "hard" content
+    char (kanji or katakana) -- i.e. it follows a real word. Multi-char function
+    words, punctuation, and を always split. This under-splits pure-hiragana
+    words rather than destroying them. Swap in fugashi for full accuracy.
 """
 
 from __future__ import annotations
@@ -26,6 +29,25 @@ for _w in PARTICLES:
     _TYPE.setdefault(_w, "particle")
 
 
+def _is_hiragana(ch: str) -> bool:
+    return "぀" <= ch <= "ゟ"
+
+
+def _is_hard(ch: str) -> bool:
+    """A content boundary: kanji or katakana. A particle right after this is grammatical."""
+    o = ord(ch)
+    return (0x4e00 <= o <= 0x9fff      # CJK unified ideographs
+            or 0x3400 <= o <= 0x4dbf   # CJK extension A
+            or 0x30a0 <= o <= 0x30ff   # katakana
+            or 0xff66 <= o <= 0xff9f)  # halfwidth katakana
+
+
+# Single-char hiragana function words that also occur inside words.
+# を is excluded: it is essentially always the object particle, never word-internal.
+_SINGLE_KANA = {w for w in (PARTICLES + ENDINGS)
+                if len(w) == 1 and _is_hiragana(w)} - {"を"}
+
+
 def tokenize_ja(text: str) -> list[tuple[str, str]]:
     """Split text into (token, type) pairs.
 
@@ -39,6 +61,11 @@ def tokenize_ja(text: str) -> list[tuple[str, str]]:
     while i < n:
         hit = next((w for w in _STOP if text.startswith(w, i)), None)
         if hit:
+            # Dangerous single-kana particle glued inside a word -> treat as content.
+            if hit in _SINGLE_KANA and not (buf and _is_hard(buf[-1])):
+                buf += hit
+                i += 1
+                continue
             if buf:
                 out.append((buf, "keyword"))
                 buf = ""
@@ -53,5 +80,18 @@ def tokenize_ja(text: str) -> list[tuple[str, str]]:
 
 
 def keywords(text: str) -> set[str]:
-    """Return only content words (keywords). Used for relevance matching."""
-    return {t for t, ty in tokenize_ja(text) if ty == "keyword" and t.strip()}
+    """Return only content words (keywords). Used for relevance matching.
+
+    Drops stray single hiragana characters left over from splitting.
+    """
+    out: set[str] = set()
+    for t, ty in tokenize_ja(text):
+        if ty != "keyword":
+            continue
+        t = t.strip()
+        if not t:
+            continue
+        if len(t) == 1 and _is_hiragana(t):  # leftover grammatical noise
+            continue
+        out.add(t)
+    return out

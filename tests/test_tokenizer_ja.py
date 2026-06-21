@@ -22,3 +22,17 @@ def test_relevance_overlap():
     a = keywords("注文が拒否されました")
     b = keywords("拒否された注文を見せて")
     assert a & b  # 拒否 / 注文 overlap
+
+
+def test_kana_words_not_destroyed():
+    # B1 regression: single-kana particles must not split pure-hiragana words.
+    assert keywords("はな") == {"はな"}        # 花/鼻 — both chars are particles
+    assert keywords("たかい") == {"たかい"}    # 高い — た=ending, か=particle
+    assert "新しいパソコン" in keywords("新しいパソコンが欲しい")
+
+
+def test_meaningful_split_still_works():
+    # A real particle after a kanji/katakana word still splits.
+    kw = keywords("注文が拒否された")
+    assert "注文" in kw
+    assert "拒否" in kw

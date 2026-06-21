@@ -1,9 +1,9 @@
 """SmartCrusher (Japanese): shrink a JSON array using 6 rules.
 
 Order:
-  1. Drop duplicates    (same content hash -> keep one)
+  1. Drop duplicates    (same content hash, ignoring identity keys -> keep one)
   2. Always keep errors  (keyword match, incl. Japanese)   <- never dropped
-  3. Keep numeric outliers (> Nσ from the per-field mean)
+  3. Keep numeric outliers (robust median + MAD, > Nσ-equivalent)
   4. Keep structural outliers (items with rare fields)
   5. Keep query-relevant items (keyword overlap via JP tokenizer)
   6. First/last anchors + fill to the target count (even sampling)
@@ -20,22 +20,32 @@ from dataclasses import dataclass
 from .lexicon_ja import ERROR_KEYWORDS
 from .tokenizer_ja import keywords
 
+# Identity / noise keys excluded from the dedup hash, so records that differ
+# only by id/timestamp still collapse as duplicates.
+_DEFAULT_IGNORE = (
+    "id", "_id", "uuid", "guid", "seq", "index", "_index",
+    "timestamp", "ts", "time", "created_at", "updated_at", "date",
+)
+
 
 @dataclass
 class CrusherConfig:
-    min_items: int = 5               # skip compression below this many items
+    min_items: int = 5                # skip compression below this many items
     max_items: int = 15              # target count after compression
-    variance_threshold: float = 2.0  # numeric outlier threshold (σ)
+    variance_threshold: float = 2.0  # numeric outlier threshold (MAD-based, ~σ)
     core_field_fraction: float = 0.8  # appears in >= this fraction -> "common field"
     first_fraction: float = 0.3
     last_fraction: float = 0.15
+    dedup_ignore_keys: tuple = _DEFAULT_IGNORE
 
 
 def _dumps(item) -> str:
     return json.dumps(item, ensure_ascii=False, sort_keys=True)
 
 
-def _item_hash(item) -> str:
+def _item_hash(item, ignore_keys) -> str:
+    if isinstance(item, dict) and ignore_keys:
+        item = {k: v for k, v in item.items() if k not in ignore_keys}
     return hashlib.md5(_dumps(item).encode("utf-8")).hexdigest()[:16]
 
 
@@ -44,13 +54,25 @@ def _looks_error(text: str) -> bool:
     return any(kw.lower() in low for kw in ERROR_KEYWORDS)
 
 
+def _median(xs: list[float]) -> float:
+    s = sorted(xs)
+    m = len(s)
+    mid = m // 2
+    return s[mid] if m % 2 else (s[mid - 1] + s[mid]) / 2
+
+
 def _numeric_outliers(data, pool, threshold) -> set[int]:
-    """z-score per shared numeric field; indices exceeding the threshold."""
+    """Robust outliers, so an outlier cannot mask itself.
+
+    Primary: median + MAD (modified z = 0.6745 * |x - median| / MAD).
+    Fallback: when MAD == 0 (majority of values identical, common after dedup),
+    use mean + population std with a >= comparison so a value sitting exactly at
+    the threshold is still flagged.
+    """
     keep: set[int] = set()
     dicts = [(i, data[i]) for i in pool if isinstance(data[i], dict)]
     if len(dicts) < 3:
         return keep
-    # Collect every numeric key
     num_keys: set[str] = set()
     for _, d in dicts:
         for k, v in d.items():
@@ -62,12 +84,20 @@ def _numeric_outliers(data, pool, threshold) -> set[int]:
         if len(vals) < 3:
             continue
         nums = [v for _, v in vals]
-        mu = sum(nums) / len(nums)
-        var = sum((x - mu) ** 2 for x in nums) / len(nums)
-        sd = var ** 0.5 or 1e-9
-        for i, v in vals:
-            if abs((v - mu) / sd) > threshold:
-                keep.add(i)
+        med = _median(nums)
+        mad = _median([abs(v - med) for v in nums])
+        if mad > 0:
+            for i, v in vals:
+                if 0.6745 * abs(v - med) / mad > threshold:
+                    keep.add(i)
+        else:
+            mu = sum(nums) / len(nums)
+            sd = (sum((x - mu) ** 2 for x in nums) / len(nums)) ** 0.5
+            if sd == 0:
+                continue
+            for i, v in vals:
+                if abs(v - mu) / sd >= threshold:
+                    keep.add(i)
     return keep
 
 
@@ -76,7 +106,6 @@ def _structural_outliers(data, pool, core_fraction) -> set[int]:
     dicts = [(i, data[i]) for i in pool if isinstance(data[i], dict)]
     if len(dicts) < 3:
         return set()
-    # Field frequency
     freq: dict[str, int] = {}
     for _, d in dicts:
         for k in d:
@@ -95,13 +124,15 @@ def _relevant(data, pool, query) -> set[int]:
 
 
 def _even_sample(pool: list[int], k: int) -> list[int]:
-    """Pick k items spread evenly across the pool."""
+    """Pick k items spread evenly across the pool, endpoints included."""
     if k <= 0 or not pool:
         return []
     if len(pool) <= k:
         return list(pool)
-    step = len(pool) / k
-    return [pool[int(i * step)] for i in range(k)]
+    if k == 1:
+        return [pool[len(pool) // 2]]
+    step = (len(pool) - 1) / (k - 1)
+    return [pool[round(i * step)] for i in range(k)]
 
 
 def crush_array(data: list, query: str | None, cfg: CrusherConfig):
@@ -110,11 +141,11 @@ def crush_array(data: list, query: str | None, cfg: CrusherConfig):
     if n < cfg.min_items:
         return list(range(n)), []
 
-    # 1) Dedup -> unique pool
+    # 1) Dedup (ignoring identity keys) -> unique pool
     seen: set[str] = set()
     pool: list[int] = []
     for i, it in enumerate(data):
-        h = _item_hash(it)
+        h = _item_hash(it, cfg.dedup_ignore_keys)
         if h in seen:
             continue
         seen.add(h)
