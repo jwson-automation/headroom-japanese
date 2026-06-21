@@ -123,8 +123,61 @@ def compress_diff(text: str, context: int = 1, max_lines: int = 120):
     return "\n".join(out_lines), n, len(kept_sorted)
 
 
+_FUNC_SIG = re.compile(
+    r"^(\s*)(?:export\s+|public\s+|private\s+|protected\s+|static\s+|async\s+|pub\s+)*"
+    r"(?:def|function|func|fn)\b"
+)
+
+
+def compress_code(text: str):
+    """Keep imports / signatures / class & top-level lines; drop function bodies.
+
+    Line-based heuristic mirroring headroom's CodeCompressor intent (which uses
+    tree-sitter). No parser, no deps: a function body is the run of lines more
+    indented than its signature; it collapses to a single `...`. Imports, class
+    declarations, decorators, type/interface lines and module-level code stay.
+    """
+    lines = text.splitlines()
+    n = len(lines)
+    out: list[str] = []
+    body_dropped = 0
+    i = 0
+    while i < n:
+        line = lines[i]
+        m = _FUNC_SIG.match(line)
+        if m:
+            out.append(line)  # signature line
+            sig_indent = len(m.group(1))
+            i += 1
+            body = 0
+            while i < n:
+                bl = lines[i]
+                if bl.strip() == "":
+                    i += 1
+                    body += 1
+                    continue
+                if len(bl) - len(bl.lstrip()) > sig_indent:
+                    i += 1
+                    body += 1
+                    continue
+                break
+            if body:
+                out.append(" " * (sig_indent + 4) + "...")
+                body_dropped += body
+            continue
+        out.append(line)
+        i += 1
+
+    kept = n - body_dropped
+    text_out = "\n".join(out)
+    if body_dropped:
+        text_out += f"\n# [{body_dropped}/{n} 行省略 (関数本体を圧縮)]"
+    return text_out, n, kept
+
+
 HANDLERS = {
     "log": compress_log,
     "search": compress_search,
     "diff": compress_diff,
+    "code": compress_code,
 }

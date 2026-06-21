@@ -22,7 +22,7 @@ from .router import detect
 from .tokens import count_tokens
 from .types import CompressResult
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 # Minimum input tokens worth compressing (matches headroom's min_tokens_to_crush).
 MIN_TOKENS_TO_CRUSH = 200
@@ -81,8 +81,8 @@ def compress(
     if orig_tok < MIN_TOKENS_TO_CRUSH:
         return passthrough(kind)
 
-    # Line-based content types (logs / search results / diffs).
-    if kind in ("log", "search", "diff"):
+    # Line-based content types (logs / search results / diffs / code).
+    if kind in ("log", "search", "diff", "code"):
         from .text_compress import HANDLERS
         out, total, kept = HANDLERS[kind](content)
         comp_tok = count_tokens(out)

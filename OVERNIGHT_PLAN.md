@@ -39,3 +39,6 @@ Source of truth for each port: `chopratejas/headroom`.
 - iter 1: Phases C/D/E/F done — edge tests (36/36), ARCHITECTURE/CHANGELOG/LIMITATIONS, MORNING.md.
   All planned phases complete in one session (cheap cached context); a final review
   wakeup is scheduled to re-run the full suite and catch anything.
+- iter 2: code compressor (headroom CodeCompressor concept, line-based) — keep
+  imports/signatures/class, drop function bodies -> `...`; router detects `code`.
+  v0.11.0. 40/40 tests.

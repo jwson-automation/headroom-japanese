@@ -12,6 +12,8 @@ import re
 _RE_SEARCH = re.compile(r"^[\w./\-]+:\d+:", re.M)
 _RE_TS = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}")
 _RE_LOGLEVEL = re.compile(r"\b(ERROR|WARN|INFO|DEBUG|FATAL)\b|エラー|警告|情報")
+_RE_CODE = re.compile(r"(?m)^\s*(?:def |class |import |from \S+ import |"
+                      r"(?:export |async )?function |func |fn |pub fn )")
 
 
 def detect(content: str) -> str:
@@ -40,5 +42,9 @@ def detect(content: str) -> str:
     # 4) Search results (file:line:)
     if _RE_SEARCH.search(s):
         return "search"
+
+    # 5) Source code (def/class/import/function at a line start; multi-line)
+    if _RE_CODE.search(s) and s.count("\n") >= 2:
+        return "code"
 
     return "text"
