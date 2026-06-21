@@ -15,11 +15,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from dataclasses import dataclass
 
 from .lexicon_ja import ERROR_KEYWORDS
-from .tokenizer_ja import keywords
+from . import relevance as _rel
 
 # Identity / noise keys excluded from the dedup hash, so records that differ
 # only by id/timestamp still collapse as duplicates.
@@ -38,7 +37,7 @@ class CrusherConfig:
     first_fraction: float = 0.3
     last_fraction: float = 0.15
     dedup_ignore_keys: tuple = _DEFAULT_IGNORE
-    relevance_min_idf: float = 0.5    # min IDF-weighted overlap to count as relevant
+    relevance_threshold: float = 0.3  # headroom's graded-relevance keep threshold
     rare_value_fraction: float = 0.1  # categorical value in <= this fraction = rare
     rare_value_max_distinct: int = 50  # skip high-cardinality (id-like) fields
     keep_numeric_extremes: bool = True  # always keep per-field min & max items
@@ -172,32 +171,13 @@ def _structural_outliers(data, pool, core_fraction) -> set[int]:
     return {i for i, d in dicts if rare & set(d.keys())}
 
 
-def _relevant(data, pool, query, min_idf) -> set[int]:
-    """Items relevant to the query, weighted by IDF.
-
-    A query word that appears in (almost) every item carries ~0 IDF, so items
-    matched only by such a generic word are not kept — this stops a common word
-    (e.g. 記事) from marking the whole array "relevant" and crowding out the real
-    answer. A rare word present in few items has high IDF and pulls its item in.
-    """
-    q = keywords(query)
-    if not q:
+def _relevant(data, pool, query, threshold) -> set[int]:
+    """Items relevant to the query, scored with headroom's graded relevance
+    (see headroom_ja.relevance, ported from headroom's ccr/context_tracker.py)."""
+    qk = _rel.query_keywords(query)
+    if not qk:
         return set()
-    item_kw = {i: keywords(_dumps(data[i])) for i in pool}
-    n = len(pool)
-    df = {t: 0 for t in q}
-    for i in pool:
-        kws = item_kw[i]
-        for t in q:
-            if t in kws:
-                df[t] += 1
-    idf = {t: math.log((n + 1) / (df[t] + 1)) for t in q}
-    keep = set()
-    for i in pool:
-        score = sum(idf[t] for t in q if t in item_kw[i])
-        if score >= min_idf:
-            keep.add(i)
-    return keep
+    return {i for i in pool if _rel.score(qk, _dumps(data[i])) >= threshold}
 
 
 def _even_sample(pool: list[int], k: int) -> list[int]:
@@ -280,7 +260,7 @@ def crush_array(data: list, query: str | None, cfg: CrusherConfig):
     if cfg.keep_numeric_extremes:
         critical |= _numeric_extremes(data, pool)
     if query:
-        critical |= _relevant(data, pool, query, cfg.relevance_min_idf)
+        critical |= _relevant(data, pool, query, cfg.relevance_threshold)
 
     # 6) Fill the budget — critical first (even past it), then first/last, then even sampling
     selected: set[int] = set(critical)
