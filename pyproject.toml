@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "headroom-japanese"
+version = "0.1.0"
+description = "일본어 컨텍스트 압축 — headroom 코어 아이디어를 룰베이스로 재구현"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = []   # 코어는 표준 라이브러리만으로 동작
+
+[project.optional-dependencies]
+# 정확한 토큰 카운트 + 형태소 분석기
+accurate = ["tiktoken>=0.5.0", "fugashi[unidic-lite]>=1.3.0"]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+include = ["headroom_ja*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
