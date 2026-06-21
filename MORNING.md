@@ -32,6 +32,23 @@
 - code(AST) 압축기 (headroom엔 있음, 우리 미구현)
 - (선택) 프록시 모드 — 라이브러리 방향이라 보류 중
 
+## 밤새 추가 진행 (iter 2–7, 전부 무료·푸시됨)
+| iter | 내용 | ver |
+|---|---|---|
+| 2 | 코드 압축기 (임포트/시그니처 유지, 본문 `...`) + 라우터 `code` 탐지 | 0.11.0 |
+| 3 | 적대적 데이터셋 4개 → **실버그 발견·수정**(관련성이 키 이름까지 매칭→압축무효; 값만 매칭으로) | 0.12.0 |
+| 4 | `keep_top_k`(2등 랭킹 갭 해결, 기본 1=현행) | 0.13.0 |
+| 5 | CodeCompressor `docstring_mode`(remove/first_line/full) | 0.14.0 |
+| 6 | 2글자 한자 부분매칭 시도→**회귀라 되돌림**(정직 기록); `LOSSLESS_VS_LOSSY.md` | — |
+| 7 | README 현행화(콘텐츠 타입·모드·멀티턴 반영) | — |
+
+**최종 상태**: 테스트 **44/44**, deterministic 벤치 23종 mean 88% 절감, answer_kept 95%
+(남은 1개 = second_highest 랭킹 갭, `keep_top_k=2`로 해결 가능 — 의도된 기본값 트레이드오프).
+새 문서: `ARCHITECTURE.md` / `CHANGELOG.md` / `LIMITATIONS.md` / `LOSSLESS_VS_LOSSY.md`.
+
+루프는 iter 7에서 **자가 종료**(저위험 무료 개선거리 소진; 남은 큰 항목=멀티배열 압축은
+LLM 벤치 검증이 필요해 네가 깨어있을 때 하는 게 안전).
+
 ## 한계 (정직하게, `LIMITATIONS.md`)
 - 집계는 retrieve 필요(lossy 본질). 모델이 원본 줘도 가끔 카운트/합 틀림.
 - 과잉 retrieve는 LLM 노이즈 → 결정적 해법은 proactive expansion(이식 완료).

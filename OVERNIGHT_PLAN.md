@@ -54,3 +54,6 @@ Source of truth for each port: `chopratejas/headroom`.
 - iter 6: investigated 2-char kanji partial-match (東京⊂東京都); lowering the CJK
   substring threshold REVERTED (re-introduced generic-word pollution) — documented
   as a real tradeoff. Added LOSSLESS_VS_LOSSY.md (lossy 92%/retrieve vs lossless 46%/none).
+- iter 7: README updated to current capabilities (content types/modes/multi-turn).
+  STOPPING — low-risk free improvements exhausted; remaining big item (multi-array
+  envelopes) needs LLM-bench verification when the owner is awake. Final: 44/44 tests.

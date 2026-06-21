@@ -23,6 +23,26 @@ Both data and query are assumed to be Japanese. Built to be versioned and benchm
 Critical items (2–5) are kept **even past the budget** (quality guarantee).
 Dropped originals live in a CCR cache and are fetched back via `retrieve(key, query)`.
 
+## Content types & modes (current)
+
+`compress()` routes by content (see `ARCHITECTURE.md`):
+
+- **JSON arrays** — the 6-rule crusher above (also finds the largest array inside a
+  nested object envelope). Numeric extremes kept via `keep_top_k` (1 = min/max).
+- **logs / search / diffs / code** — line-based compressors (`text_compress.py`):
+  template-dedup logs, per-file search caps, diff context trimming, and a
+  CodeCompressor that keeps imports/signatures and drops bodies
+  (`docstring_mode` = remove / first_line / full).
+- **lossless mode** — `CrusherConfig(lossless_first=True)` packs uniform arrays
+  into columns+rows with **no rows dropped** (see `LOSSLESS_VS_LOSSY.md`).
+- **aggregation** — sum/count/median are answered by the LLM calling `retrieve`
+  (the general path); `include_summary=True` is an optional cheap shortcut.
+- **multi-turn** — `compress(..., turn=, workspace=)` + `proactive_expand(query,
+  turn=, workspace=)` pre-expands relevant prior compressions so the model rarely
+  needs to retrieve (ported from headroom `ccr/context_tracker.py`).
+
+Honest limits are in `LIMITATIONS.md`; version history in `CHANGELOG.md`.
+
 ## Japanese tokenizer (no morphological analyzer)
 
 Function words (particles / conjunctions / verb endings / punctuation) are used as **delimiters**;
