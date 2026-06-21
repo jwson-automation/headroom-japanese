@@ -51,3 +51,6 @@ Source of truth for each port: `chopratejas/headroom`.
   the second-highest ranking gap on demand. v0.13.0. 41/41 tests.
 - iter 5: CodeCompressor docstring_mode (remove default / first_line / full),
   like headroom DocstringMode; keeps a one-line function-purpose hint. v0.14.0. 44/44 tests.
+- iter 6: investigated 2-char kanji partial-match (東京⊂東京都); lowering the CJK
+  substring threshold REVERTED (re-introduced generic-word pollution) — documented
+  as a real tradeoff. Added LOSSLESS_VS_LOSSY.md (lossy 92%/retrieve vs lossless 46%/none).

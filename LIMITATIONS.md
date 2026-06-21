@@ -38,6 +38,15 @@ when a particle is glued inside a kana word, or for novel segmentation. Mitigate
 by: rare-value/outlier rules catching items relevance misses, and
 `pip install '.[accurate]'` to swap in `fugashi`.
 
+## 2-character kanji partial matches
+Relevance gives a substring bonus only to query words of length ≥ 3, so a 2-char
+kanji query word that is a *substring* of a longer value word (`東京` ⊂ `東京都`)
+gets no bonus and may score below threshold. Lowering the threshold to 2 for CJK
+was tried and reverted: it re-introduces generic-word pollution (`記事`, `店舗`
+also get the bonus and keep everything). Length alone can't separate "generic"
+from "meaningful" 2-char kanji, so the ≥3 threshold stays. Exact 2-char matches
+still work via keyword overlap; only *partial* compound matches are affected.
+
 ## Token counter approximation
 Without `tiktoken` the counter is a heuristic (CJK≈1 token, ASCII≈4 chars/token).
 Savings numbers are approximate; install `tiktoken` for exact counts.
