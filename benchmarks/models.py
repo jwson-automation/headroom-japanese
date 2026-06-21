@@ -32,25 +32,24 @@ def _text(resp) -> str:
     return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
+# Need-based, neutral framing (ported from headroom's CCR tool wording). The tool
+# fires on "I need more than what's shown", not on "a marker exists" — the latter
+# is always true after compression and forces over-retrieval.
 _ANSWER_SYSTEM = (
     "あなたはツール出力のJSONデータを読み、質問に日本語で簡潔に答えるアシスタントです。"
-    "まず、表示されている行だけで答えられるか必ず確認してください。"
-    "特定の1件を探す質問（誰が・どれが・何番）は、その行が表示されていれば"
-    "そのまま答え、retrieve_original は絶対に呼ばないでください。"
-    "retrieve_original を呼んでよいのは次の2つの場合だけです: "
-    "(1) 合計・件数・平均などの集計で『N件 省略』により全件が必要なとき、"
-    "(2) 探している具体的な項目が表示行のどこにも見当たらないとき。"
-    "フィルタ付き集計（例: ある条件の合計）では query を付けずに全件取得し、"
-    "自分で条件を絞って計算してください。"
+    "回答は表示されているデータから行ってください。"
+    "表示されている内容だけでは答えに必要なデータが足りない場合に限り、"
+    "retrieve_original ツールで省略された元データを取り戻してください。"
+    "表示行だけで答えられるなら、ツールは呼ばないでください。"
     "答えが見つからなければ「不明」とだけ答えてください。余計な説明はしないでください。"
 )
 
 _RETRIEVE_TOOL = {
     "name": "retrieve_original",
     "description": (
-        "圧縮で省略された元データを取り戻す。合計・件数・フィルタ集計など、"
-        "表示中の一部の行だけでは正確に答えられない時に呼ぶ。"
-        "query を渡すと関連行だけ、省略すると全件を返す。"
+        "トークン節約のために圧縮・省略された元データを取り戻す。"
+        "圧縮されたツール結果に表示されている以上のデータが必要なときに使う。"
+        "query を渡すと一致する項目だけ、省略すると全件を返す。"
     ),
     "input_schema": {
         "type": "object",
