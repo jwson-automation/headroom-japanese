@@ -1,0 +1,174 @@
+# headroom-japanese — benchmark
+
+Generated: 2026-06-21 18:38 · answerer: `claude-opus-4-8` · judge: `claude-haiku-4-5` · token backend: `approx`
+
+Each case asks the **same Japanese question twice** — once on the full tool output, once on the compressed output — and an LLM judge grades each answer against the gold answer. Transcripts are verbatim.
+
+## Summary
+
+- samples: **12**
+- mean token savings: **81%**
+- answer_kept (deterministic, 10 single-answer cases): **80%**
+- **retention** (compressed still correct, of 12 answerable on full context): **67%**
+
+| dataset | savings | full | compressed | answer_kept |
+|---|---|:---:|:---:|:---:|
+| gen_rejected_order | 92% | ✅ | ✅ | ✅ |
+| gen_high_amount | 92% | ✅ | ✅ | ✅ |
+| gen_low_amount | 92% | ✅ | ✅ | ✅ |
+| gen_error_log | 95% | ✅ | ✅ | ✅ |
+| gen_last_error | 92% | ✅ | ✅ | ✅ |
+| gen_rare_field | 92% | ✅ | ✅ | ✅ |
+| gen_rare_status | 92% | ✅ | ❌ | ❌ |
+| gen_search_results | 1% | ✅ | ❌ | ❌ |
+| gen_long_reviews | 85% | ✅ | ✅ | ✅ |
+| gen_nested_envelope | 92% | ✅ | ✅ | ✅ |
+| gen_total_sum | 61% | ✅ | ❌ | n/a |
+| gen_count_status | 92% | ✅ | ❌ | n/a |
+
+## Transcripts
+
+### `gen_rejected_order`  (200 items)
+
+- **質問**: 拒否された注文のユーザー名は誰ですか？
+- **正解 (gold)**: `田中`
+- **トークン**: 3707 → 294 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 3707tok) | 田中 | ✅ |
+| 圧縮 (compressed, 294tok) | 田中 | ✅ |
+
+### `gen_high_amount`  (200 items)
+
+- **質問**: 異常に高額な注文の注文IDは何番ですか？
+- **正解 (gold)**: `88`
+- **トークン**: 3695 → 281 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 3695tok) | 88番 | ✅ |
+| 圧縮 (compressed, 281tok) | 88 | ✅ |
+
+### `gen_low_amount`  (200 items)
+
+- **質問**: 異常に金額が低い注文の注文IDは何番ですか？
+- **正解 (gold)**: `151`
+- **トークン**: 3694 → 281 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 3694tok) | 151 | ✅ |
+| 圧縮 (compressed, 281tok) | 151番 | ✅ |
+
+### `gen_error_log`  (300 items)
+
+- **質問**: 最初にエラーになった処理のメッセージは何ですか？
+- **正解 (gold)**: `タイムアウト`
+- **トークン**: 5433 → 287 (**95%** saved · kept 15 / dropped 285)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 5433tok) | 決済サービスへの接続がタイムアウトしました | ✅ |
+| 圧縮 (compressed, 287tok) | 決済サービスへの接続がタイムアウトしました | ✅ |
+
+### `gen_last_error`  (200 items)
+
+- **質問**: 最後（一番後）にエラーになった注文のIDは何番ですか？
+- **正解 (gold)**: `176`
+- **トークン**: 3052 → 240 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 3052tok) | 176 | ✅ |
+| 圧縮 (compressed, 240tok) | 176 | ✅ |
+
+### `gen_rare_field`  (200 items)
+
+- **質問**: 返金理由が付いている注文のユーザー名は誰ですか？
+- **正解 (gold)**: `佐藤`
+- **トークン**: 2404 → 194 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 2404tok) | 佐藤 | ✅ |
+| 圧縮 (compressed, 194tok) | 佐藤 | ✅ |
+
+### `gen_rare_status`  (200 items)
+
+- **質問**: 返品ステータスの注文のユーザー名は誰ですか？
+- **正解 (gold)**: `鈴木`
+- **トークン**: 3644 → 277 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: False
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 3644tok) | 鈴木 | ✅ |
+| 圧縮 (compressed, 277tok) | 不明 | ❌ |
+
+### `gen_search_results`  (150 items)
+
+- **質問**: Pythonの非同期処理について説明している記事のタイトルは何ですか？
+- **正解 (gold)**: `Python async/awaitの使い方`
+- **トークン**: 5432 → 5400 (**1%** saved · kept 149 / dropped 1)
+- **answer_kept**: False
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 5432tok) | Python async/awaitの使い方 | ✅ |
+| 圧縮 (compressed, 5400tok) | 不明 | ❌ |
+
+### `gen_long_reviews`  (100 items)
+
+- **質問**: 画面が割れていたと報告したレビュアーは誰ですか？
+- **正解 (gold)**: `山本`
+- **トークン**: 3157 → 489 (**85%** saved · kept 15 / dropped 85)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 3157tok) | 山本 | ✅ |
+| 圧縮 (compressed, 489tok) | 山本 | ✅ |
+
+### `gen_nested_envelope`  (200 items)
+
+- **質問**: 出荷できなかった注文のユーザー名は誰ですか？
+- **正解 (gold)**: `中村`
+- **トークン**: 3669 → 302 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: True
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 3669tok) | 中村 | ✅ |
+| 圧縮 (compressed, 302tok) | 中村 | ✅ |
+
+### `gen_total_sum`  (40 items)
+
+- **質問**: 全注文の合計金額はちょうどいくらですか？数字で答えてください。
+- **正解 (gold)**: `40780`
+- **トークン**: 455 → 179 (**61%** saved · kept 15 / dropped 25)
+- **answer_kept**: n/a (集計のため単一item無し)
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 455tok) | 40780 | ✅ |
+| 圧縮 (compressed, 179tok) | 不明 | ❌ |
+
+### `gen_count_status`  (200 items)
+
+- **質問**: キャンセルされた注文は全部で何件ですか？
+- **正解 (gold)**: `19`
+- **トークン**: 2883 → 219 (**92%** saved · kept 15 / dropped 185)
+- **answer_kept**: n/a (集計のため単一item無し)
+
+| context | 回答 | 判定 |
+|---|---|:---:|
+| 原本 (full, 2883tok) | 19件 | ✅ |
+| 圧縮 (compressed, 219tok) | 不明 | ❌ |
+
