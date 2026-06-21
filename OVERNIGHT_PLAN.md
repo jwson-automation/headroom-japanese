@@ -47,3 +47,5 @@ Source of truth for each port: `chopratejas/headroom`.
   KEY NAMES (query 'tier' kept every item -> 0% compression); now matches VALUES
   only (item_nested_field 0%->92%). Documented ranking-beyond-extremes gap
   (second_highest). v0.12.0. 40/40 tests, bench answer_kept 95% (1 honest gap).
+- iter 4: keep_top_k config (default 1=min/max; 2 keeps the runner-up) to close
+  the second-highest ranking gap on demand. v0.13.0. 41/41 tests.

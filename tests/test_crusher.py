@@ -108,6 +108,17 @@ def test_summary_embeds_aggregates():
     assert f'"キャンセル": {n_cancel}' in r.text                  # true count present
 
 
+def test_keep_top_k_keeps_runner_up():
+    # 2nd-highest at a middle position, not a 2σ outlier. Default (k=1) drops it;
+    # keep_top_k=2 keeps it.
+    data = [{"id": i, "amount": 10000 + ((i + 100) % 200)} for i in range(200)]
+    # max 10199 at id=99, 2nd 10198 at id=98
+    keep1, _ = crush_array(data, None, CrusherConfig())
+    assert 98 not in keep1                          # documented gap at k=1
+    keep2, _ = crush_array(data, None, CrusherConfig(keep_top_k=2))
+    assert 98 in keep2 and 99 in keep2              # runner-up kept at k=2
+
+
 def test_small_array_untouched():
     data = [{"id": i} for i in range(3)]
     keep, dropped = crush_array(data, None, CrusherConfig())

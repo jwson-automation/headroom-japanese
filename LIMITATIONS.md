@@ -25,10 +25,11 @@ barely moves this (~6–7/19, varies run to run). The deterministic control is
 
 ## Ranking beyond the extremes
 We always keep each numeric field's **min and max**, so "cheapest"/"most
-expensive" work. But the **2nd/3rd-highest** (runner-up) at a middle position,
-when it isn't a 2σ outlier, gets dropped (`gen_second_highest` — answer_kept
-False). Top-K ranking needs either retrieve or a `keep_top_k` option (not yet
-implemented). Median and other order-statistics likewise need retrieve
+expensive" work. The **2nd/3rd-highest** (runner-up) at a middle position, when
+it isn't a 2σ outlier, is dropped by default (`gen_second_highest`). Set
+`CrusherConfig(keep_top_k=2)` to keep the runner-up (top-2 + bottom-2 per numeric
+field); ranking deeper than `keep_top_k` still needs retrieve. Median and other
+order-statistics likewise need retrieve
 (`gen_median`); the optional summary carries avg, not median.
 
 ## Rule-based Japanese tokenizer

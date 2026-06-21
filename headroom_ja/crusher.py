@@ -40,7 +40,9 @@ class CrusherConfig:
     relevance_threshold: float = 0.3  # headroom's graded-relevance keep threshold
     rare_value_fraction: float = 0.1  # categorical value in <= this fraction = rare
     rare_value_max_distinct: int = 50  # skip high-cardinality (id-like) fields
-    keep_numeric_extremes: bool = True  # always keep per-field min & max items
+    keep_numeric_extremes: bool = True  # always keep per-field extremes
+    keep_top_k: int = 1                  # how many top+bottom per numeric field
+                                         # (1 = min/max; 2 also keeps the runner-up)
     include_summary: bool = False      # optional cheap aggregates; the general path
                                        # for aggregation is the retrieve() loop
     lossless_first: bool = False       # try lossless columnar compaction before
@@ -138,25 +140,30 @@ def _rare_value_outliers(data, pool, fraction, max_distinct) -> set[int]:
     return keep
 
 
-def _numeric_extremes(data, pool) -> set[int]:
-    """Always keep the min and max item of every numeric field (catches
-    'cheapest' / 'most expensive' / 'oldest' questions even when not 2σ outliers)."""
+def _numeric_extremes(data, pool, top_k=1) -> set[int]:
+    """Keep the top_k highest and top_k lowest item of every numeric field. With
+    top_k=1 this is min/max (catches 'cheapest'/'most expensive'); top_k=2 also
+    keeps the runner-up ('2nd highest'). Ranking beyond top_k still needs retrieve."""
     keep: set[int] = set()
+    k = max(1, top_k)
     dicts = [(i, data[i]) for i in pool if isinstance(data[i], dict)]
     if len(dicts) < 3:
         return keep
     num_keys: set[str] = set()
     for _, d in dicts:
-        for k, v in d.items():
+        for key, v in d.items():
             if isinstance(v, (int, float)) and not isinstance(v, bool):
-                num_keys.add(k)
-    for k in num_keys:
-        vals = [(i, d[k]) for i, d in dicts
-                if isinstance(d.get(k), (int, float)) and not isinstance(d.get(k), bool)]
+                num_keys.add(key)
+    for key in num_keys:
+        vals = [(i, d[key]) for i, d in dicts
+                if isinstance(d.get(key), (int, float)) and not isinstance(d.get(key), bool)]
         if len(vals) < 3:
             continue
-        keep.add(min(vals, key=lambda x: x[1])[0])
-        keep.add(max(vals, key=lambda x: x[1])[0])
+        vals.sort(key=lambda x: x[1])
+        for i, _ in vals[:k]:       # lowest k
+            keep.add(i)
+        for i, _ in vals[-k:]:      # highest k
+            keep.add(i)
     return keep
 
 
@@ -288,7 +295,7 @@ def crush_array(data: list, query: str | None, cfg: CrusherConfig):
     critical |= _rare_value_outliers(data, pool, cfg.rare_value_fraction,
                                      cfg.rare_value_max_distinct)
     if cfg.keep_numeric_extremes:
-        critical |= _numeric_extremes(data, pool)
+        critical |= _numeric_extremes(data, pool, cfg.keep_top_k)
     if query:
         critical |= _relevant(data, pool, query, cfg.relevance_threshold)
 
