@@ -49,6 +49,26 @@
 루프는 iter 7에서 **자가 종료**(저위험 무료 개선거리 소진; 남은 큰 항목=멀티배열 압축은
 LLM 벤치 검증이 필요해 네가 깨어있을 때 하는 게 안전).
 
+## 2일차 밤: Rust 포팅 (네 지시 — "예제 보고 우리 Rust로 새로 작성", 의존성 0)
+headroom 코어가 Rust라 Python paraphrase가 발산·버그났던 문제를 해결. **우리 Rust로 충실 포팅 + PyO3.**
+
+| 단계 | 내용 |
+|---|---|
+| P0 | PyO3/maturin 빌드 파이프라인 증명 (Windows, py3.13) |
+| P1 | **병렬 에이전트 5개**가 headroom `.rs` 읽어 `crates/headroom_ja_core/PORT_SPECS/` 5개 스펙 작성 |
+| P2/P3 | `crush_indices` Rust 구현 (dedup MD5 sorted-keys[:16], stride fill, 구조/Pareto 희귀값 outlier, prioritize first-3/last-2) + PyO3 |
+| P4 | `crusher.py`가 기본 Rust 코어 호출 (일본어 seam=is_error/relevance, 우리 확장=force_keep/dedup_ignore_keys로 주입), Python fallback 보존 |
+| P5 | `compact()` Rust 포팅 + `RUST_PARITY.md` |
+
+**검증**: 테스트 44/44, deterministic 벤치 87%/95% 불변. **Rust vs Python fallback = 23개 데이터셋 answer_kept 불일치 0** (filler만 다름, Rust가 headroom 충실).
+
+**중요 발견**: headroom엔 z-score 숫자 이상치가 없다(내 Python 발명). 실제 핵심은 구조적+Pareto 희귀값. Rust는 headroom대로, 숫자 이상치/extremes는 우리 확장으로 `force_keep` seam에 분리.
+
+**현재 동등성**: 압축 **코어(선택+무손실)가 같은 언어 Rust로** 들어옴 → 진짜 동등에 한참 다가감. 의존성 0.
+**남은 정제(너 + LLM 벤치와 함께)**: adaptive `compute_optimal_k`(현재 max_items 고정), dedup 해시 byte-parity, headroom의 full bucketed compaction. 그리고 **Rust 코어로 LLM retention 재측정**(새 키로).
+
+**빌드**: 새 클론은 `pwsh crates/headroom_ja_core/build.ps1` (없으면 Python fallback 자동). 루프는 여기서 자가 종료.
+
 ## 한계 (정직하게, `LIMITATIONS.md`)
 - 집계는 retrieve 필요(lossy 본질). 모델이 원본 줘도 가끔 카운트/합 틀림.
 - 과잉 retrieve는 LLM 노이즈 → 결정적 해법은 proactive expansion(이식 완료).
