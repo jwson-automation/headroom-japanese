@@ -20,6 +20,13 @@ from dataclasses import dataclass
 from .lexicon_ja import ERROR_KEYWORDS
 from . import relevance as _rel
 
+try:
+    import headroom_ja_core as _core  # faithful Rust port of headroom's selection
+    _RUST = True
+except ImportError:                    # pure-Python fallback if the wheel isn't built
+    _core = None
+    _RUST = False
+
 # Identity / noise keys excluded from the dedup hash, so records that differ
 # only by id/timestamp still collapse as duplicates.
 _DEFAULT_IGNORE = (
@@ -270,7 +277,46 @@ def summarize(items: list, ignore_keys=()) -> dict:
 
 
 def crush_array(data: list, query: str | None, cfg: CrusherConfig):
-    """Shrink the array; return (sorted kept indices, dropped indices)."""
+    """Shrink the array; return (sorted kept indices, dropped indices).
+
+    Uses the Rust core (headroom_ja_core) when available — it ports headroom's
+    selection (dedup, structural + Pareto rare-value, prioritize first-3/last-2).
+    The Japanese seam (errors, relevance) and our extra rules (numeric outliers +
+    extremes/top_k, which headroom lacks) are computed here and passed in. Falls
+    back to the pure-Python path if the wheel isn't built."""
+    n = len(data)
+    if n < cfg.min_items:
+        return list(range(n)), []
+    if _RUST:
+        return _crush_array_rust(data, query, cfg)
+    return _crush_array_py(data, query, cfg)
+
+
+def _crush_array_rust(data: list, query: str | None, cfg: CrusherConfig):
+    n = len(data)
+    pool = list(range(n))
+    is_error = [_looks_error(_dumps(it)) for it in data]
+    if query:
+        qk = _rel.query_keywords(query)
+        relevance = [_rel.score(qk, _values_text(it)) for it in data]
+    else:
+        relevance = [0.0] * n
+    # Our extras headroom doesn't have, unioned in via the force_keep seam.
+    forced: set[int] = _numeric_outliers(data, pool, cfg.variance_threshold)
+    if cfg.keep_numeric_extremes:
+        forced |= _numeric_extremes(data, pool, cfg.keep_top_k)
+    force_keep = [i in forced for i in range(n)]
+    keep, dropped = _core.crush_indices(
+        json.dumps(data, ensure_ascii=False),
+        is_error, relevance, force_keep,
+        list(cfg.dedup_ignore_keys), cfg.min_items, cfg.max_items,
+        cfg.core_field_fraction, cfg.relevance_threshold, cfg.rare_value_max_distinct,
+    )
+    return keep, dropped
+
+
+def _crush_array_py(data: list, query: str | None, cfg: CrusherConfig):
+    """Pure-Python fallback (also the reference for parity)."""
     n = len(data)
     if n < cfg.min_items:
         return list(range(n)), []

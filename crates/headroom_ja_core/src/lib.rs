@@ -45,9 +45,22 @@ fn canon(v: &Value, out: &mut String) {
 }
 
 /// MD5 of the canonical form, first 16 hex chars (matches headroom's [:16]).
-fn content_hash(v: &Value) -> String {
+/// `ignore` drops the named top-level keys before hashing (Python-side seam: lets
+/// records differing only by id/timestamp collapse as duplicates). Empty `ignore`
+/// = full-item hash, which is headroom's faithful behavior.
+fn content_hash(v: &Value, ignore: &HashSet<&str>) -> String {
     let mut s = String::new();
-    canon(v, &mut s);
+    match v {
+        Value::Object(m) if !ignore.is_empty() => {
+            let filtered: Map<String, Value> = m
+                .iter()
+                .filter(|(k, _)| !ignore.contains(k.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            canon(&Value::Object(filtered), &mut s);
+        }
+        _ => canon(v, &mut s),
+    }
     let mut h = Md5::new();
     h.update(s.as_bytes());
     let hex = format!("{:x}", h.finalize());
@@ -55,14 +68,14 @@ fn content_hash(v: &Value) -> String {
 }
 
 /// orchestration.rs::deduplicate_indices_by_content — lowest index per hash.
-fn dedup(indices: &BTreeSet<usize>, items: &[Value]) -> BTreeSet<usize> {
+fn dedup(indices: &BTreeSet<usize>, items: &[Value], ignore: &HashSet<&str>) -> BTreeSet<usize> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut out = BTreeSet::new();
     for &i in indices {
         if i >= items.len() {
             continue;
         }
-        let h = content_hash(&items[i]);
+        let h = content_hash(&items[i], ignore);
         if seen.insert(h) {
             out.insert(i);
         }
@@ -77,6 +90,7 @@ fn fill_remaining(
     items: &[Value],
     n: usize,
     effective_max: usize,
+    ignore: &HashSet<&str>,
 ) -> BTreeSet<usize> {
     let remaining = effective_max.saturating_sub(keep.len());
     if remaining == 0 {
@@ -85,7 +99,7 @@ fn fill_remaining(
     let mut seen: HashSet<String> = HashSet::new();
     for &i in keep {
         if i < n {
-            seen.insert(content_hash(&items[i]));
+            seen.insert(content_hash(&items[i], ignore));
         }
     }
     let candidates: Vec<usize> = (0..n).filter(|i| !keep.contains(i)).collect();
@@ -105,7 +119,7 @@ fn fill_remaining(
                 break 'outer;
             }
             let idx = candidates[i];
-            let h = content_hash(&items[idx]);
+            let h = content_hash(&items[idx], ignore);
             if !seen.contains(&h) {
                 result.insert(idx);
                 seen.insert(h);
@@ -214,23 +228,26 @@ fn rare_value_outliers(items: &[Value], max_distinct: usize) -> BTreeSet<usize> 
 }
 
 /// orchestration.rs::prioritize_indices — the full pipeline.
+#[allow(clippy::too_many_arguments)]
 fn prioritize(
     items: &[Value],
     n: usize,
     effective_max: usize,
     is_error: &[bool],
     relevance: &[f64],
+    force_keep: &[bool],
     rel_threshold: f64,
     core_fraction: f64,
     rare_max_distinct: usize,
+    ignore: &HashSet<&str>,
 ) -> BTreeSet<usize> {
     let all: BTreeSet<usize> = (0..n).collect();
 
     // Step 1: dedup
-    let mut current = dedup(&all, items);
+    let mut current = dedup(&all, items, ignore);
     // Step 2: fill
     if current.len() < effective_max && current.len() < n {
-        current = fill_remaining(&current, items, n, effective_max);
+        current = fill_remaining(&current, items, n, effective_max, ignore);
     }
     // Step 3: under budget -> done
     if current.len() <= effective_max {
@@ -246,6 +263,9 @@ fn prioritize(
         }
         if i < relevance.len() && relevance[i] >= rel_threshold {
             prioritized.insert(i);
+        }
+        if i < force_keep.len() && force_keep[i] {
+            prioritized.insert(i); // Python-side extras: numeric outliers / extremes
         }
     }
     prioritized.extend(structural_outliers(items, core_fraction));
@@ -286,13 +306,16 @@ fn prioritize(
 /// Select which item indices to keep / drop. The Japanese seam (is_error,
 /// relevance) is supplied by Python; the statistical core is ported from headroom.
 #[pyfunction]
-#[pyo3(signature = (items_json, is_error, relevance, min_items=5, max_items=15,
-                    core_fraction=0.8, relevance_threshold=0.3, rare_max_distinct=50))]
+#[pyo3(signature = (items_json, is_error, relevance, force_keep, dedup_ignore_keys=Vec::new(),
+                    min_items=5, max_items=15, core_fraction=0.8, relevance_threshold=0.3,
+                    rare_max_distinct=50))]
 #[allow(clippy::too_many_arguments)]
 fn crush_indices(
     items_json: &str,
     is_error: Vec<bool>,
     relevance: Vec<f64>,
+    force_keep: Vec<bool>,
+    dedup_ignore_keys: Vec<String>,
     min_items: usize,
     max_items: usize,
     core_fraction: f64,
@@ -305,15 +328,18 @@ fn crush_indices(
     if n < min_items {
         return Ok(((0..n).collect(), Vec::new()));
     }
+    let ignore: HashSet<&str> = dedup_ignore_keys.iter().map(|s| s.as_str()).collect();
     let keep = prioritize(
         &items,
         n,
         max_items,
         &is_error,
         &relevance,
+        &force_keep,
         relevance_threshold,
         core_fraction,
         rare_max_distinct,
+        &ignore,
     );
     let keep_vec: Vec<usize> = keep.iter().copied().collect();
     let dropped: Vec<usize> = (0..n).filter(|i| !keep.contains(i)).collect();

@@ -48,3 +48,8 @@ Python (`headroom_ja_core.ping()`). Rebuild: `crates/headroom_ja_core/build.ps1`
   Faithful to headroom (NO z-score; rare-value is the real mechanism).
 - NEXT (P4): wire crusher.py to call core.crush_indices (Python supplies is_error+
   relevance); keep Python fallback if module missing. Then P5 parity + compaction port.
+- P4: crusher.py now calls the Rust core (headroom_ja_core.crush_indices) by
+  default; Japanese seam (is_error, relevance) + extras (numeric outliers/extremes
+  via force_keep, dedup_ignore_keys) passed from Python. Pure-Python fallback kept
+  if the wheel is absent. Full suite 44/44 GREEN, bench 87%/95% unchanged.
+- NEXT (P5): parity doc + port compact() to Rust (PORT_SPECS/5).
