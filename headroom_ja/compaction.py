@@ -13,8 +13,25 @@ accepts it when it clears `lossless_min_savings_ratio`.
 
 from __future__ import annotations
 
+import json
+
+try:
+    import headroom_ja_core as _core
+    _RUST = True
+except ImportError:
+    _core = None
+    _RUST = False
+
 
 def compact(items: list, core_fraction: float = 0.8):
+    """Lossless columnar compaction. Uses the Rust core when available."""
+    if _RUST:
+        res = _core.compact(json.dumps(items, ensure_ascii=False), core_fraction)
+        return json.loads(res) if res is not None else None
+    return _compact_py(items, core_fraction)
+
+
+def _compact_py(items: list, core_fraction: float = 0.8):
     """Return a columnar dict if the array is cleanly tabular, else None.
 
     Lossless: every original key/value is reconstructable from columns + rows.

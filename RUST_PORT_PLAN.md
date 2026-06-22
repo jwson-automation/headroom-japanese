@@ -53,3 +53,9 @@ Python (`headroom_ja_core.ping()`). Rebuild: `crates/headroom_ja_core/build.ps1`
   via force_keep, dedup_ignore_keys) passed from Python. Pure-Python fallback kept
   if the wheel is absent. Full suite 44/44 GREEN, bench 87%/95% unchanged.
 - NEXT (P5): parity doc + port compact() to Rust (PORT_SPECS/5).
+- P5a: compact() ported to Rust (core.compact); compaction.py uses it when _RUST,
+  Python fallback kept. P5b: RUST_PARITY.md — Rust vs Python fallback = 0 answer_kept
+  mismatches across 23 datasets (filler differs, Rust is the faithful one). 44/44 green.
+  Rust port milestone COMPLETE (crush_indices + compact in Rust, wired, tests green).
+  Refinements left (with owner + LLM bench): adaptive compute_optimal_k, byte-parity
+  hash, headroom full bucketed compaction. Loop self-stops here.

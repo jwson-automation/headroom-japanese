@@ -346,6 +346,59 @@ fn crush_indices(
     Ok((keep_vec, dropped))
 }
 
+/// Lossless columnar compaction (compaction/compactor.rs): factor shared keys out
+/// into a header, emit rows positionally. Returns the packed object as a JSON
+/// string, or None if the array isn't cleanly tabular. Lossless: every key/value
+/// reconstructable. Column order = descending frequency, first-seen tie-break.
+#[pyfunction]
+#[pyo3(signature = (items_json, core_fraction=0.8))]
+fn compact(items_json: &str, core_fraction: f64) -> PyResult<Option<String>> {
+    let items: Vec<Value> = serde_json::from_str(items_json)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("invalid JSON: {e}")))?;
+    if items.len() < 5 || !items.iter().all(|v| v.is_object()) {
+        return Ok(None);
+    }
+    let n = items.len();
+    let mut order: Vec<String> = Vec::new();
+    let mut freq: HashMap<String, usize> = HashMap::new();
+    for it in &items {
+        for k in it.as_object().unwrap().keys() {
+            if !freq.contains_key(k) {
+                order.push(k.clone());
+            }
+            *freq.entry(k.clone()).or_insert(0) += 1;
+        }
+    }
+    let mut columns = order;
+    columns.sort_by(|a, b| freq[b].cmp(&freq[a])); // stable: first-seen tie-break
+    let core = columns
+        .iter()
+        .filter(|k| freq[*k] as f64 >= core_fraction * n as f64)
+        .count();
+    if core < 2 {
+        return Ok(None);
+    }
+    let rows: Vec<Value> = items
+        .iter()
+        .map(|it| {
+            let o = it.as_object().unwrap();
+            Value::Array(
+                columns
+                    .iter()
+                    .map(|k| o.get(k).cloned().unwrap_or(Value::Null))
+                    .collect(),
+            )
+        })
+        .collect();
+    let mut obj = Map::new();
+    obj.insert(
+        "_columns".to_string(),
+        Value::Array(columns.into_iter().map(Value::String).collect()),
+    );
+    obj.insert("_rows".to_string(), Value::Array(rows));
+    Ok(Some(serde_json::to_string(&Value::Object(obj)).unwrap()))
+}
+
 #[pyfunction]
 fn ping() -> String {
     "headroom_ja_core ok".to_string()
@@ -355,5 +408,6 @@ fn ping() -> String {
 fn headroom_ja_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ping, m)?)?;
     m.add_function(wrap_pyfunction!(crush_indices, m)?)?;
+    m.add_function(wrap_pyfunction!(compact, m)?)?;
     Ok(())
 }
