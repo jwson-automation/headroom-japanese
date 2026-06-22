@@ -41,3 +41,10 @@ Python (`headroom_ja_core.ping()`). Rebuild: `crates/headroom_ja_core/build.ps1`
 
 ## Progress log
 - P0: PyO3/maturin pipeline proven on Windows (rustc 1.95, py3.13).
+- P1: 5 port specs via parallel agents.
+- P2/P3: Rust crush_indices implemented (dedup MD5 sorted-keys[:16], stride fill,
+  structural + Pareto rare-value outliers, first-3/last-2 critical-first) + PyO3.
+  Validated on datasets: answer_kept holds (rejected/rare_status/count_status).
+  Faithful to headroom (NO z-score; rare-value is the real mechanism).
+- NEXT (P4): wire crusher.py to call core.crush_indices (Python supplies is_error+
+  relevance); keep Python fallback if module missing. Then P5 parity + compaction port.
